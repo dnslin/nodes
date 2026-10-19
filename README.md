@@ -7,6 +7,8 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-supported-2496ED?logo=docker&logoColor=white)
 ![Cloud Mail](https://img.shields.io/badge/Cloud%20Mail-3.0.0-438A65)
+[![CI](https://github.com/dnslin/nodes/actions/workflows/ci.yml/badge.svg)](https://github.com/dnslin/nodes/actions/workflows/ci.yml)
+[![GHCR](https://img.shields.io/badge/GHCR-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)](https://github.com/dnslin/nodes/pkgs/container/nodes)
 
 [快速开始](#快速开始) · [取出节点](#取出节点) · [继续已有账号](#继续已有账号) · [使用文档](docs/usage.md) · [问题反馈](https://github.com/dnslin/nodes/issues)
 
@@ -14,7 +16,7 @@
 
 - **Cloud Mail 收信**：创建附属邮箱，识别新收到的 ProxyScrape 验证邮件。邮箱登录失效时，重新登录一次并继续当前请求。
 - **完整处理流程**：浏览器验证 → 注册 → 验证邮箱 → 查询或领取当前账号试用 → 分页导出 HTTP 代理。
-- **服务器运行**：Docker 包含 Chromium 和虚拟显示器，无需安装桌面环境。
+- **服务器运行**：GHCR 提供 amd64、arm64 镜像，内置 Chromium 和虚拟显示器，无需安装桌面环境或本地构建。
 - **本机文件交付**：启动脚本自动取回容器输出，适用于 Linux、Docker Desktop、Colima 和远程 Docker。
 - **失败后继续**：通过 `--resume EMAIL` 复用已保存账号，不必重新注册或再次收取验证码。
 
@@ -44,14 +46,16 @@ CLOUD_MAIL_PASSWORD="你的登录密码"
 
 `CLOUD_MAIL_URL` 填站点地址，不要附加 `/api`。密码包含 `#` 等字符时使用引号。其余配置先保留默认值。
 
-### 3. 构建并检查邮箱
+### 3. 拉取镜像并检查邮箱
 
 ```bash
-docker compose build
+docker compose pull
 ./docker-run.sh --check-mail
 ```
 
 看到 `Cloud Mail 接口正常` 后再继续。此检查只读取主邮箱邮件列表，不创建邮箱，也不注册 ProxyScrape 账号。
+
+默认使用 `ghcr.io/dnslin/nodes:latest`，Docker 会选择当前机器对应的 amd64 或 arm64 镜像。固定版本时，在 `.env` 中设置 `NODES_IMAGE=ghcr.io/dnslin/nodes:0.1.1`。
 
 ### 4. 运行一个任务
 
@@ -97,6 +101,30 @@ http://username:password@192.0.2.10:8080
 程序查询当前账号的真实状态：尚未领取试用时提交领取请求一次，已经领取时读取试用子账号并导出。它不会创建新邮箱或注册新账号，也不会打开浏览器。访问凭据仍需有效，邮箱也必须已经通过服务端验证。
 
 成功后生成新的 `proxies_resume_*.txt`，处理结果追加到原账号文件。服务端拒绝领取或套餐已过期时，会保留错误原因。
+
+## 镜像与自动发布
+
+| 镜像标签 | 用途 |
+| --- | --- |
+| `ghcr.io/dnslin/nodes:latest` | 最新稳定版本 |
+| `ghcr.io/dnslin/nodes:0.1.1` | 固定到指定发布版本 |
+| `ghcr.io/dnslin/nodes:0.1` | 跟随 0.1 系列更新 |
+
+GitHub Actions 在 `main` 推送、PR 和版本标签上运行离线测试，并分别在 amd64、arm64 原生运行器构建镜像、检查容器能否启动。只有版本标签触发 GHCR 发布；两个架构都通过后，才更新多架构版本标签和 `latest`。CI 不创建真实邮箱、不注册账号，也不领取试用。
+
+更新代码和镜像：
+
+```bash
+git pull --ff-only
+docker compose pull
+```
+
+需要修改源码并在本机构建时，使用独立的本地镜像名：
+
+```bash
+NODES_IMAGE=nodes:local docker compose build
+NODES_IMAGE=nodes:local ./docker-run.sh --check-mail
+```
 
 ## Linux 直接运行
 

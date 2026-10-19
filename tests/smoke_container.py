@@ -13,7 +13,7 @@ def docker(*arguments, **kwargs):
 
 
 def main():
-    image = sys.argv[1] if len(sys.argv) > 1 else "nodes-cloudmail:local"
+    image = sys.argv[1] if len(sys.argv) > 1 else "ghcr.io/dnslin/nodes:latest"
     exit_name = f"nodes-exit-smoke-{uuid.uuid4().hex[:10]}"
     try:
         result = subprocess.run(

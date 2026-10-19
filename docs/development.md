@@ -28,7 +28,7 @@ sh -n docker-entrypoint.sh
 ## 容器检查
 
 ```bash
-docker compose build
+docker compose pull
 docker compose run --rm nodes python tests/smoke_browser.py
 docker compose run --rm nodes python tests/smoke_turnstile_dom.py
 .venv/bin/python tests/smoke_container.py
@@ -59,7 +59,28 @@ docker compose run --rm nodes python tests/smoke_turnstile_dom.py
 
 当前版本完成了 Linux arm64 Docker 浏览器检查、真实 Cloud Mail 登录续期检查，以及已有账号的邮箱验证状态查询、试用开通和 100 个 HTTP 代理导出。容器输出已通过真实文件复制取回 macOS 本机。
 
-这些结果不等于所有平台和网络都已验收。Windows / macOS 完整注册流程、amd64 实机运行，以及导出代理的逐条连通性仍需在目标环境检查。试用资格、验证服务和代理数量由外部服务决定。
+这些结果不等于所有平台和网络都已验收。Windows / macOS 完整注册流程、amd64 上的真实注册业务流程，以及导出代理的逐条连通性仍需在目标环境检查。CI 的双架构检查仅验证镜像构建、容器启动和浏览器依赖能否导入。试用资格、验证服务和代理数量由外部服务决定。
+
+## GitHub Actions 与 GHCR
+
+工作流位于 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)。
+
+- `main` 推送、PR、版本标签和手动运行：在 Python 3.11 / 3.12 上执行离线测试；执行 Ruff、编译、shell 语法及安装包构建检查。
+- 镜像检查：分别使用 `ubuntu-24.04` 和 `ubuntu-24.04-arm` 原生构建 amd64、arm64 镜像，并运行容器命令行帮助检查。CI 不打开真实浏览器或请求注册服务。
+- 版本发布：推送 `vX.Y.Z` 标签后，两个架构都通过检查才合并并发布 GHCR 标签。PR 和手动检查不会发布镜像。
+
+GHCR 登录使用仓库自带的 `GITHUB_TOKEN`，不需要创建额外的发布密码。只有发布任务需要 `packages: write` 权限。首次发布的 GHCR 包默认是私有，仓库维护者需要在包设置中将其设为 Public；完成后用户无需登录即可拉取。
+
+发布新版本时先修改 `pyproject.toml` 和 `CHANGELOG.md`，提交并推送到 `main`，再创建对应版本标签，例如：
+
+```bash
+git tag -a v0.1.2 -m 'Release v0.1.2'
+git push origin v0.1.2
+```
+
+查看 [Actions](https://github.com/dnslin/nodes/actions/workflows/ci.yml) 结果，确认 GHCR 已发布两个架构后，再发布对应的 GitHub Release。
+
+实现参考：[Docker 多架构构建](https://docs.docker.com/build/ci/github-actions/multi-platform/)、[GitHub Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
 
 ## 提交问题与改动
 

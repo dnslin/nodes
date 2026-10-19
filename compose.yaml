@@ -1,7 +1,7 @@
 services:
   nodes:
     build: .
-    image: nodes-cloudmail:local
+    image: ${NODES_IMAGE:-ghcr.io/dnslin/nodes:latest}
     init: true
     env_file:
       - .env

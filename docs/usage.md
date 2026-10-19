@@ -18,6 +18,8 @@ JSON 配置适用于本机 Python 运行。默认 Docker 配置不会复制或�
 
 Docker 镜像已配置 `/usr/bin/chromium`，一般不需要指定浏览器路径。不要把宿主机的 macOS 或 Windows 浏览器路径传入 Linux 容器。
 
+`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.1.1` 固定版本。它不是 Python / JSON 配置项。
+
 Cloud Mail 客户端共用本轮登录状态，邮箱 HTTP 请求依次执行，浏览器任务仍可并发。只有明确的 HTTP 401 或 API `code: 401` 才触发一次重新登录。网络错误、权限错误、登录失败或第二次 401 会直接报告。
 
 新邮箱使用站点返回的第一个可用域名。收信只处理本轮邮箱中新增、收件人匹配且发件人来自 ProxyScrape 域名的邮件。
@@ -25,8 +27,8 @@ Cloud Mail 客户端共用本轮登录状态，邮箱 HTTP 请求依次执行，
 ## Docker
 
 ```bash
-# 首次运行或更新代码后构建镜像
-docker compose build
+# 首次运行或更新版本后拉取镜像
+docker compose pull
 
 # 检查邮箱，不创建账号
 ./docker-run.sh --check-mail
@@ -52,7 +54,16 @@ docker cp CONTAINER_NAME:/app/account/. ./account/
 
 不要在取回文件前删除保留的容器。Compose 的绑定目录属于 Docker 所在主机；在 Colima 或远程 Docker 下，它可能与本机项目目录不同。将本机备份迁移到其他 Docker 主机后，需要先将账号文件放入该主机映射的 `account/` 目录，`--resume` 才能读取。
 
-容器使用 Chromium 和 Xvfb，无需宿主机桌面。Dockerfile 使用 Debian Chromium 包，可用于 amd64 和 arm64；当前真实容器运行验证在 Linux arm64 上完成，amd64 尚未实机验证。
+容器使用 Chromium 和 Xvfb，无需宿主机桌面。GHCR 的版本镜像同时包含 `linux/amd64` 和 `linux/arm64`，Docker 根据机器架构自动选择，不需要手动添加 `--platform`。
+
+发布标签包括完整版本（例如 `0.1.1`）、次版本（`0.1`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
+
+本地修改源码后，可构建独立的镜像：
+
+```bash
+NODES_IMAGE=nodes:local docker compose build
+NODES_IMAGE=nodes:local ./docker-run.sh --check-mail
+```
 
 ## Linux 本机
 
@@ -129,7 +140,9 @@ macOS 可使用 `./start.sh`；Windows 可使用 `start.bat`。Windows 启动脚
 
 ```bash
 git pull --ff-only
-docker compose build
+docker compose pull
 ```
 
-本机直接运行时，在更新后重新安装 `requirements.txt`。保留 `.env`、`account/` 和 `node/`，不要把它们当作可删除的构建缓存。
+固定了 `NODES_IMAGE` 版本的用户，需要先修改该值再拉取新版本。本地源码构建用户重新执行 `NODES_IMAGE=nodes:local docker compose build`。本机直接运行时，在更新后重新安装 `requirements.txt`。
+
+保留 `.env`、`account/` 和 `node/`，不要把它们当作可删除的构建缓存。
