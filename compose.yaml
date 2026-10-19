@@ -1,0 +1,12 @@
+services:
+  nodes:
+    build: .
+    image: nodes-cloudmail:local
+    init: true
+    env_file:
+      - .env
+    shm_size: 1gb
+    volumes:
+      - ./account:/app/account
+      - ./node:/app/node
+    command: ["--count", "1", "--threads", "1", "--hide-browser"]

@@ -1,0 +1,38 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Local secrets: ignore the real config but keep the example template tracked
+config.local.json
+!config.local.json.example
+
+# Local credentials and sessions
+proxyscrape_token.json
+*.token.json
+
+# Generated accounts and proxy credentials
+account/
+node/
+
+# turnstilePatch 扩展现随仓库提供（开箱即用）；仍可用 TURNSTILE_EXTENSION_PATH 覆盖为本机其它目录
+
+# Runtime artifacts
+*.log
+screenshots/
+.DS_Store
+
+# Tool caches / scratch (不该进仓库)
+.playwright-mcp/
+.wrangler/
+_diag_widget.py
+
+# Local environment and build/test output
+.env.*
+!.env.example
+artifacts/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

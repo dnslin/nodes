@@ -1,0 +1,196 @@
+import json
+
+import pytest
+
+import proxyscrape_register as app
+
+CONFIG = {
+    "cloud_mail_url": "https://mail.example.org",
+    "cloud_mail_email": "owner@example.org",
+    "cloud_mail_password": "secret",
+    "browser_path": "",
+    "turnstile_extension_path": "turnstilePatch",
+}
+
+
+class Session:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class Mail:
+    instances = []
+
+    def __init__(self, base_url, email, password):
+        assert (base_url, email, password) == (
+            "https://mail.example.org",
+            "owner@example.org",
+            "secret",
+        )
+        self.events = []
+        self.session = Session()
+        self.instances.append(self)
+
+    def new_address(self):
+        return "random@example.org"
+
+    def ensure_mailbox(self, email):
+        self.events.append(("create", email))
+
+    def list_messages(self, email):
+        self.events.append(("baseline", email))
+        return [{"emailId": 7}]
+
+    def wait_for_code(self, email, **kwargs):
+        assert kwargs == {"after_id": 7, "timeout": 9}
+        self.events.append(("wait", email))
+        return "aB3dE6gH9j"
+
+
+def setup_flow(monkeypatch):
+    monkeypatch.setattr(app, "CloudMail", Mail)
+    monkeypatch.setattr(app, "solve_turnstile", lambda **kw: "challenge-token")
+    monkeypatch.setattr(
+        app,
+        "register",
+        lambda *a: (
+            Session(),
+            "access-token",
+            {"associatedSubaccounts": []},
+        ),
+    )
+    monkeypatch.setattr(app, "resend_code", lambda *a: True)
+    monkeypatch.setattr(app, "whoami", lambda *a: {"EmailVerified": True})
+    monkeypatch.setattr(
+        app,
+        "fetch_trial_proxies",
+        lambda session, token: (
+            "trial-42",
+            "proxy-user",
+            "proxy-pass",
+            ["127.0.0.1:8080"],
+        ),
+        raising=False,
+    )
+    return Mail(CONFIG["cloud_mail_url"], CONFIG["cloud_mail_email"], CONFIG["cloud_mail_password"])
+
+
+def test_cloud_mail_flow_exports_verified_account_and_proxy(monkeypatch, tmp_path):
+    mail = setup_flow(monkeypatch)
+
+    def verify(session, token, code):
+        assert code == "aB3dE6gH9j"
+        return True
+
+    monkeypatch.setattr(app, "verify_email", verify)
+    path = tmp_path / "proxies.txt"
+    rec = app._register_once(True, path, CONFIG, mail, mail_timeout=9)
+    assert rec["email"] == "random@example.org"
+    assert rec["verified"] is True
+    assert rec["proxy_count"] == 1
+    assert rec["proxy_account_id"] == "trial-42"
+    assert mail.session.closed is False
+    assert Mail.instances[-1].events == [
+        ("create", "random@example.org"),
+        ("baseline", "random@example.org"),
+        ("wait", "random@example.org"),
+    ]
+    assert path.read_text() == "http://proxy-user:proxy-pass@127.0.0.1:8080\n"
+
+
+def test_mail_failure_is_saved_and_returns_failure(monkeypatch, tmp_path):
+    mail = setup_flow(monkeypatch)
+
+    def timeout(*a, **kw):
+        raise TimeoutError("mail timed out")
+
+    monkeypatch.setattr(Mail, "wait_for_code", timeout)
+    account = tmp_path / "accounts.jsonl"
+    result = app.register_one(
+        1,
+        True,
+        account,
+        tmp_path / "proxies.txt",
+        CONFIG,
+        mail,
+        max_attempts=1,
+    )
+    assert result["verified"] is False
+    assert result["error"] == "mail timed out"
+    assert json.loads(account.read_text())["access_token"] == "access-token"
+    assert not (tmp_path / "proxies.txt").exists()
+
+
+def test_does_not_export_when_server_still_reports_unverified(monkeypatch, tmp_path):
+    mail = setup_flow(monkeypatch)
+    monkeypatch.setattr(app, "verify_email", lambda *a: True)
+    monkeypatch.setattr(app, "whoami", lambda *a: {"EmailVerified": False})
+    rec = app._register_once(True, tmp_path / "proxies.txt", CONFIG, mail, mail_timeout=9)
+    assert rec["verified"] is False
+    assert "验证" in rec["error"]
+    assert not (tmp_path / "proxies.txt").exists()
+
+
+def test_batch_cli_does_not_prompt_and_propagates_failure(monkeypatch):
+    monkeypatch.setattr(app, "load_config", lambda path: CONFIG)
+    seen = []
+
+    def run(count, threads, hidden, config, **kwargs):
+        seen.append((count, threads, hidden, config, kwargs))
+        return False
+
+    monkeypatch.setattr(app, "run_round", run)
+    assert app.main(["--count", "2", "--threads", "1", "--hide-browser", "--attempts", "1"]) == 1
+    assert seen[0][:3] == (2, 1, True)
+    assert seen[0][4]["max_attempts"] == 1
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--count", "0"],
+        ["--count", "-1"],
+        ["--count", "1", "--threads", "0"],
+        ["--count", "1", "--attempts", "0"],
+        ["--count", "1", "--mail-timeout", "0"],
+    ],
+)
+def test_invalid_options_fail_before_side_effects(args):
+    with pytest.raises(SystemExit) as error:
+        app.main(args)
+    assert error.value.code == 2
+
+
+def test_help_works_without_credentials(capsys):
+    with pytest.raises(SystemExit) as error:
+        app.main(["--help"])
+    assert error.value.code == 0
+    assert "--count" in capsys.readouterr().out
+
+
+def test_round_shares_mail_client_and_closes_it_after_all_workers(monkeypatch, tmp_path):
+    calls = []
+    clients = []
+
+    class Login(Mail):
+        def _login(self):
+            calls.append("login")
+            self.token = "one-round-token"
+
+    def worker(idx, hidden, acc_file, node_file, config, mail, **kwargs):
+        assert mail.session.closed is False
+        clients.append(mail)
+        return {"proxy_count": 1}
+
+    monkeypatch.setattr(app, "CloudMail", Login)
+    monkeypatch.setattr(app, "register_one", worker)
+    monkeypatch.setattr(app, "_ACCOUNT_DIR", str(tmp_path / "account"))
+    monkeypatch.setattr(app, "_NODE_DIR", str(tmp_path / "node"))
+    assert app.run_round(3, 2, True, CONFIG) is True
+    assert calls == ["login"]
+    assert len(clients) == 3
+    assert all(client is clients[0] for client in clients)
+    assert clients[0].session.closed is True
