@@ -36,6 +36,8 @@ docker compose run --rm nodes python tests/smoke_turnstile_dom.py
 
 前两个脚本在容器内打开本地测试页面，验证 Chromium、虚拟显示器、扩展加载及封闭 Shadow DOM（页面封装的组件树）中的 iframe 检测。第三个脚本在 Docker 主机运行，检查退出码和终止信号传递。这些检查均不请求 ProxyScrape 注册接口。
 
+`smoke_container.py` 默认检查 `ghcr.io/dnslin/nodes:latest`。使用固定版本或本地构建时，传入实际镜像名，例如 `.venv/bin/python tests/smoke_container.py nodes:local`。
+
 检查真实 Docker 输出取回可执行以下命令。它会复制 Docker 端已有的账号和节点文件，但不创建新账号：
 
 ```bash
