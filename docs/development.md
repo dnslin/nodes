@@ -28,7 +28,7 @@ sh -n scripts/run-docker.sh
 
 ```bash
 docker compose pull
-docker create --name nodes-browser-smoke --shm-size 1g ghcr.io/dnslin/nodes:0.3.0 python /app/smoke.py
+docker create --name nodes-browser-smoke --shm-size 1g ghcr.io/dnslin/nodes:0.4.0 python /app/smoke.py
 docker cp tests/smoke/browser.py nodes-browser-smoke:/app/smoke.py
 docker start -a nodes-browser-smoke
 docker rm nodes-browser-smoke
@@ -81,7 +81,7 @@ CI 验证离线流程、安装包和双架构镜像启动；本地浏览器检�
 
 ## GitHub Actions 与 GHCR
 
-工作流位于 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)。
+质量检查与镜像发布位于 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)。
 
 - `main` 推送、PR、版本标签和手动运行：在 Python 3.11 / 3.12 上执行离线测试；执行 Ruff、编译、shell 语法及安装包构建检查。
 - 镜像检查：分别使用 `ubuntu-24.04` 和 `ubuntu-24.04-arm` 原生构建 amd64、arm64 镜像，并运行容器命令行帮助检查。CI 不打开真实浏览器或请求注册服务。
@@ -99,6 +99,8 @@ git push origin vX.Y.Z
 查看 [Actions](https://github.com/dnslin/nodes/actions/workflows/ci.yml) 结果，确认 GHCR 已发布两个架构后，再发布对应的 GitHub Release。
 
 实现参考：[Docker 多架构构建](https://docs.docker.com/build/ci/github-actions/multi-platform/)、[GitHub Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
+
+每日业务任务独立放在 [`.github/workflows/daily.yml`](../.github/workflows/daily.yml)，直接安装 Python 包并使用运行器自带浏览器，不构建或运行 Docker。默认的手动环境检查仅访问 localhost 页面；定时任务和关闭“仅检查运行环境”的手动运行会使用 Secrets 创建真实账号、导出并同步 Resin，详见[每日运行指南](actions.md)。每日工作流不上传业务文件。
 
 ## 提交问题与改动
 

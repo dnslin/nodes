@@ -1,0 +1,92 @@
+name: Daily Nodes
+
+on:
+  schedule:
+    # UTC 13:00 = Asia/Shanghai 21:00.
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    inputs:
+      check_only:
+        description: '仅检查运行环境，不注册账号或连接邮箱 / Resin'
+        type: boolean
+        default: true
+      count:
+        description: '本次尝试的账号数量（定时任务固定为 3）'
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+# Resin 的订阅内容更新不是原子追加，同一时间只运行一个每日任务。
+concurrency:
+  group: nodes-daily
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NODES_COUNT: ${{ inputs.count || '3' }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check required configuration
+        if: github.event_name == 'schedule' || !inputs.check_only
+        env:
+          CLOUD_MAIL_URL: ${{ secrets.CLOUD_MAIL_URL }}
+          CLOUD_MAIL_EMAIL: ${{ secrets.CLOUD_MAIL_EMAIL }}
+          CLOUD_MAIL_PASSWORD: ${{ secrets.CLOUD_MAIL_PASSWORD }}
+          RESIN_URL: ${{ secrets.RESIN_URL }}
+          RESIN_ADMIN_TOKEN: ${{ secrets.RESIN_ADMIN_TOKEN }}
+        run: |
+          missing=0
+          for name in CLOUD_MAIL_URL CLOUD_MAIL_EMAIL CLOUD_MAIL_PASSWORD RESIN_URL RESIN_ADMIN_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::缺少 GitHub Secret: $name"
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install native runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth
+          browser_path="$(command -v chromium)"
+          "$browser_path" --version
+          echo "BROWSER_PATH=$browser_path" >> "$GITHUB_ENV"
+          python -m pip install .
+      - name: Check native browser without external services
+        if: github.event_name == 'workflow_dispatch' && inputs.check_only
+        run: |
+          nodes --help
+          xvfb-run -a -s '-screen 0 1280x900x24' python tests/smoke/browser.py
+          xvfb-run -a -s '-screen 0 1280x900x24' python tests/smoke/turnstile_dom.py
+      - name: Register, export and synchronize to Resin
+        id: task
+        if: github.event_name == 'schedule' || !inputs.check_only
+        env:
+          CLOUD_MAIL_URL: ${{ secrets.CLOUD_MAIL_URL }}
+          CLOUD_MAIL_EMAIL: ${{ secrets.CLOUD_MAIL_EMAIL }}
+          CLOUD_MAIL_PASSWORD: ${{ secrets.CLOUD_MAIL_PASSWORD }}
+          RESIN_URL: ${{ secrets.RESIN_URL }}
+          RESIN_ADMIN_TOKEN: ${{ secrets.RESIN_ADMIN_TOKEN }}
+          RESIN_SUBSCRIPTION_NAME: ${{ vars.RESIN_SUBSCRIPTION_NAME || 'nodes' }}
+        run: nodes --count "$NODES_COUNT" --threads 1 --attempts 1 --hide-browser
+      - name: Run summary
+        if: always()
+        env:
+          CHECK_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.check_only }}
+          TASK_OUTCOME: ${{ steps.task.outcome }}
+        run: |
+          if [ "$CHECK_ONLY" = true ]; then
+            echo '本次仅检查原生运行环境，未执行注册或 Resin 同步。' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "本次账号任务状态：$TASK_OUTCOME。详情见任务日志。" >> "$GITHUB_STEP_SUMMARY"
+            echo '本工作流不保存账号或节点附件，临时输出随运行环境销毁。' >> "$GITHUB_STEP_SUMMARY"
+          fi

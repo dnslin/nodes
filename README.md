@@ -1,64 +1,46 @@
 # Nodes
 
-使用 Cloud Mail 完成 ProxyScrape 注册、邮箱验证与 HTTP 代理导出，支持 Linux 和 Docker。
+使用 Cloud Mail 完成 ProxyScrape 注册、邮箱验证与 HTTP 代理导出，支持 GitHub Actions、Docker 和 Linux。
 
 [![CI](https://github.com/dnslin/nodes/actions/workflows/ci.yml/badge.svg)](https://github.com/dnslin/nodes/actions/workflows/ci.yml)
+[![Daily](https://github.com/dnslin/nodes/actions/workflows/daily.yml/badge.svg)](https://github.com/dnslin/nodes/actions/workflows/daily.yml)
 [![GHCR](https://img.shields.io/badge/GHCR-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)](https://github.com/dnslin/nodes/pkgs/container/nodes)
 
-- **开箱运行**：镜像内置 Chromium 和虚拟显示器，本机无需安装 Python。
-- **自动取回文件**：运行结束后，账号与节点保存到本机项目目录。
-- **继续已有账号**：导出失败后可复用已保存账号，无需重新注册。
-- **Resin 同步**：可选将所有账号的节点合并到一个专用订阅，见[配置方法](docs/usage.md#resin-自动导入)。
+- **每日自动运行**：GitHub Actions 直接运行 Python，无需为 Nodes 单独部署服务器。
+- **Resin 同步**：所有账号的节点合并到一个专用订阅，保留已有节点并去重。
+- **服务器部署**：Docker 内置浏览器和虚拟显示器，账号与节点自动取回本机。
 
-## 快速开始
+## GitHub Actions
 
-需要 Docker、Docker Compose 和 POSIX shell；Windows 推荐使用 WSL。邮箱需为可创建附属邮箱的 **Cloud Mail 3.0.0** 账号。
+1. Fork 本仓库，按[配置指南](docs/actions.md#配置)添加邮箱和 Resin 的 5 项 Secrets。
+2. 在 **Actions → Daily Nodes** 中启用工作流，先运行默认的环境检查，再取消“仅检查运行环境”执行实际任务。
+3. 此后每天北京时间 **21:00** 尝试注册 **3 个账号**，导出后自动同步 Resin。
+
+本方式不保存账号或节点附件，Resin 需要保持在线。定时触发可能延迟；完整运行规则见[每日运行指南](docs/actions.md)。
+
+## Docker / 本机运行
+
+需要 Docker、Docker Compose 和 POSIX shell；Windows 推荐 WSL。邮箱需为可创建附属邮箱的 Cloud Mail 3.0.0 账号。
 
 ```bash
 git clone https://github.com/dnslin/nodes.git
 cd nodes
 cp .env.example .env
-```
-
-编辑 `.env`，填写邮箱站点和登录信息。站点地址不包含 `/api`：
-
-```dotenv
-CLOUD_MAIL_URL=https://mail.example.org
-CLOUD_MAIL_EMAIL=owner@example.org
-CLOUD_MAIL_PASSWORD="你的登录密码"
-```
-
-拉取镜像，检查邮箱，再运行一个任务：
-
-```bash
+# 按使用指南填写 .env 中的邮箱信息，可选配置 Resin。
 docker compose pull
 ./scripts/run-docker.sh --check-mail
 ./scripts/run-docker.sh --count 1 --threads 1 --attempts 1 --hide-browser
 ```
 
-默认镜像为 `ghcr.io/dnslin/nodes:latest`，自动选择 amd64 或 arm64。上面的注册命令只尝试一次；试用资格、代理数量和验证服务是否接受请求由服务端决定。
+账号保存在 `account/`，代理保存在 `node/`，无需进入容器。已有账号可用 `./scripts/run-docker.sh --resume EMAIL` 继续处理。Linux 直接安装、配置字段和故障处理见[使用指南](docs/usage.md)。
 
-## 取出节点与恢复
-
-脚本自动取回输出，无需进入容器：
-
-```text
-account/accounts_*.jsonl   账号、访问凭据与处理结果
-node/proxies_*.txt         HTTP 代理，每行一个地址
-```
-
-账号已注册且邮箱已验证时，可继续处理试用和导出：
-
-```bash
-./scripts/run-docker.sh --resume saved@example.org
-```
-
-请妥善保存 `.env` 和账号文件。复制失败时，脚本保留容器并显示手动取回命令。导出成功不代表每个代理都已通过连通性检查。
+试用资格、代理数量和验证服务是否接受请求由服务端决定；导出成功不代表每个代理都已通过连通性检查。
 
 ## 文档
 
-- [使用指南](docs/usage.md)：配置、Linux / macOS / Windows、本地构建、参数与常见问题。
-- [开发指南](docs/development.md)：目录结构、测试和 GitHub Actions / GHCR 发布。
+- [每日运行指南](docs/actions.md)：Secrets、定时任务与手动运行。
+- [使用指南](docs/usage.md)：配置、本机平台、命令参数与 Resin 同步。
+- [开发指南](docs/development.md)：目录结构、测试与镜像发布。
 - [更新记录](CHANGELOG.md) · [问题反馈](https://github.com/dnslin/nodes/issues)
 
 ## 来源与授权

@@ -2,6 +2,8 @@
 
 [返回首页](../README.md)
 
+本指南适用于 Docker 和本机运行。无需单独部署 Nodes 的定时运行方式见 [GitHub Actions 指南](actions.md)。
+
 ## 配置
 
 配置优先级为：**进程环境变量 > `.env` > `config.local.json`**。配置从当前工作目录读取，相对路径也以该目录为基准。使用 JSON 时，复制 `config.local.json.example` 后编辑。
@@ -21,7 +23,7 @@ JSON 配置适用于本机 Python 运行。默认 Docker 配置不会复制或�
 
 Docker 镜像已配置 `/usr/bin/chromium`，一般不需要指定浏览器路径。不要把宿主机的 macOS 或 Windows 浏览器路径传入 Linux 容器。
 
-`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.3.0` 固定版本。它不是 Python / JSON 配置项。
+`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.4.0` 固定版本。它不是 Python / JSON 配置项。
 
 Cloud Mail 客户端共用本轮登录状态，邮箱 HTTP 请求依次执行，浏览器任务仍可并发。只有明确的 HTTP 401 或 API `code: 401` 才触发一次重新登录。网络错误、权限错误、登录失败或第二次 401 会直接报告。
 
@@ -59,7 +61,7 @@ docker cp CONTAINER_NAME:/app/account/. ./account/
 
 容器使用 Chromium 和 Xvfb，无需宿主机桌面。GHCR 的版本镜像同时包含 `linux/amd64` 和 `linux/arm64`，Docker 根据机器架构自动选择，不需要手动添加 `--platform`。
 
-发布标签包括完整版本（例如 `0.3.0`）、次版本（`0.3`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
+发布标签包括完整版本（例如 `0.4.0`）、次版本（`0.4`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
 
 本地修改源码后，可构建独立的镜像：
 
@@ -82,7 +84,7 @@ python3 -m venv .venv
 .venv/bin/nodes --resume saved@example.org
 ```
 
-先按[首页](../README.md#快速开始)配置 `.env`，在该工作目录运行；账号和节点也写入此目录。
+先按[首页](../README.md#docker--本机运行)下载项目、复制 `.env.example` 并填写邮箱配置，再在该工作目录运行；账号和节点也写入此目录。
 
 Linux 没有 `DISPLAY` 时，`nodes` 在注册前自动调用 `xvfb-run`，无需额外启动脚本。检查邮箱和恢复已有账号不启动显示器。有桌面的 Linux 可以使用 `--show-browser`。在 Xvfb 中，该参数只会把窗口显示在虚拟显示器中。
 
