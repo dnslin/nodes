@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from nodes_config import load_config
+from nodes.config import DEFAULT_EXTENSION, load_config
 
 
 def test_environment_overrides_json_and_dotenv(tmp_path):
@@ -25,7 +25,7 @@ def test_environment_overrides_json_and_dotenv(tmp_path):
 def test_missing_config_is_allowed_until_run(tmp_path):
     config = load_config(tmp_path, environ={})
     assert config["cloud_mail_password"] == ""
-    assert config["turnstile_extension_path"] == str(tmp_path / "turnstilePatch")
+    assert config["turnstile_extension_path"] == str(DEFAULT_EXTENSION)
 
 
 @pytest.mark.parametrize("content", ["{", "[]"])

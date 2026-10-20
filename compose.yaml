@@ -9,4 +9,4 @@ services:
     volumes:
       - ./account:/app/account
       - ./node:/app/node
-    command: ["--count", "1", "--threads", "1", "--hide-browser"]
+    command: ["nodes", "--count", "1", "--threads", "1", "--hide-browser"]

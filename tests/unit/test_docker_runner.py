@@ -1,4 +1,4 @@
-"""Launchers preserve arguments, process exit status, and virtual-display setup."""
+"""Docker output retrieval preserves commands, results and recoverable failures."""
 
 import json
 import os
@@ -8,71 +8,16 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
-@pytest.fixture
-def launcher(tmp_path):
-    script = tmp_path / "start.sh"
-    shutil.copyfile(ROOT / "start.sh", script)
-    script.chmod(0o755)
-    python = tmp_path / ".venv/bin/python"
-    python.parent.mkdir(parents=True)
-    python.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\nexit 23\n')
-    python.chmod(0o755)
-    tools = tmp_path / "tools"
-    tools.mkdir()
-    uname = tools / "uname"
-    uname.write_text("#!/bin/sh\necho Linux\n")
-    uname.chmod(0o755)
-    return script, tools
-
-
-def test_linux_launcher_with_display_forwards_arguments_and_failure(launcher):
-    script, tools = launcher
-    result = subprocess.run(
-        [str(script), "--count", "2", "--hide-browser"],
-        env={**os.environ, "DISPLAY": ":99", "PATH": f"{tools}:{os.environ['PATH']}"},
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 23
-    assert result.stdout.splitlines() == [
-        "proxyscrape_register.py",
-        "--count",
-        "2",
-        "--hide-browser",
-    ]
-
-
-def test_linux_launcher_without_display_uses_xvfb_and_preserves_failure(launcher):
-    script, tools = launcher
-    xvfb = tools / "xvfb-run"
-    xvfb.write_text('#!/bin/sh\nprintf "virtual-display\\n"\nshift 3\nexec "$@"\n')
-    xvfb.chmod(0o755)
-    environment = {**os.environ, "PATH": f"{tools}:{os.environ['PATH']}"}
-    environment.pop("DISPLAY", None)
-    result = subprocess.run(
-        [str(script), "--count", "3"],
-        env=environment,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 23
-    assert result.stdout.splitlines() == [
-        "virtual-display",
-        "proxyscrape_register.py",
-        "--count",
-        "3",
-    ]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
 def docker_launcher(tmp_path):
     project = tmp_path / "project with spaces"
     project.mkdir()
-    script = project / "docker-run.sh"
-    shutil.copyfile(ROOT / "docker-run.sh", script)
+    script = project / "scripts/run-docker.sh"
+    script.parent.mkdir()
+    shutil.copyfile(ROOT / "scripts/run-docker.sh", script)
     script.chmod(0o755)
     tools = tmp_path / "tools"
     tools.mkdir()
@@ -86,7 +31,9 @@ def docker_launcher(tmp_path):
         "if args[0] == 'compose':\n"
         "    raise SystemExit(int(os.environ.get('RUN_EXIT', '0')))\n"
         "if args[0] == 'cp':\n"
-        "    if os.environ.get('COPY_FAIL') == '1':\n"
+        "    if os.environ.get('COPY_FAIL') == '1' or (\n"
+        "        os.environ.get('COPY_FAIL') == 'node' and args[1].endswith('/node')\n"
+        "    ):\n"
         "        raise SystemExit(1)\n"
         "    dest = pathlib.Path(args[2])\n"
         "    dest.mkdir()\n"
@@ -108,7 +55,7 @@ def docker_launcher(tmp_path):
     return script, project, environment, calls, temp
 
 
-@pytest.mark.parametrize("exit_code", [0, 1])
+@pytest.mark.parametrize("exit_code", [0, 1, 23])
 def test_docker_launcher_copies_outputs_before_removing_container(docker_launcher, exit_code):
     script, project, environment, calls_file, temp = docker_launcher
     result = subprocess.run(
@@ -124,7 +71,7 @@ def test_docker_launcher_copies_outputs_before_removing_container(docker_launche
     calls = [json.loads(line) for line in calls_file.read_text().splitlines()]
     run, account_copy, node_copy, remove = calls
     assert run[:5] == ["compose", "run", "--no-deps", "--name", remove[1]]
-    assert run[5:] == ["nodes", "--resume", "saved@example.org"]
+    assert run[5:] == ["nodes", "nodes", "--resume", "saved@example.org"]
     assert "--rm" not in run
     assert account_copy[1] == f"{remove[1]}:/app/account"
     assert node_copy[1] == f"{remove[1]}:/app/node"
@@ -133,11 +80,12 @@ def test_docker_launcher_copies_outputs_before_removing_container(docker_launche
     assert not list(temp.iterdir())
 
 
-def test_docker_launcher_keeps_container_when_copy_fails(docker_launcher):
+@pytest.mark.parametrize("failure", ["1", "node"])
+def test_docker_launcher_keeps_container_when_copy_fails(docker_launcher, failure):
     script, project, environment, calls_file, temp = docker_launcher
     result = subprocess.run(
         [str(script), "--count", "1"],
-        env={**environment, "COPY_FAIL": "1"},
+        env={**environment, "COPY_FAIL": failure},
         capture_output=True,
         text=True,
     )
@@ -148,3 +96,38 @@ def test_docker_launcher_keeps_container_when_copy_fails(docker_launcher):
     assert not list((project / "node").iterdir())
     # 保留中途复制的输出，方便用户在失败后继续取出。
     assert list(temp.iterdir())
+
+
+def test_docker_launcher_without_arguments_uses_compose_default_command(docker_launcher):
+    script, project, environment, calls_file, _temp = docker_launcher
+    result = subprocess.run(
+        [str(script)],
+        cwd=project.parent,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    calls = [json.loads(line) for line in calls_file.read_text().splitlines()]
+    assert calls[0][-1] == "nodes"
+    assert len(calls[0]) == 6
+    assert (project / "node/proxies_test.txt").is_file()
+
+
+def test_local_copy_failure_also_preserves_container_and_downloaded_outputs(docker_launcher):
+    script, project, environment, calls_file, temp = docker_launcher
+    copy = Path(environment["PATH"].split(os.pathsep)[0]) / "cp"
+    copy.write_text("#!/bin/sh\nexit 1\n")
+    copy.chmod(0o755)
+    result = subprocess.run(
+        [str(script)],
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    calls = [json.loads(line) for line in calls_file.read_text().splitlines()]
+    assert [call[0] for call in calls] == ["compose", "cp", "cp"]
+    assert "输出复制失败" in result.stderr
+    assert list(temp.rglob("proxies_test.txt"))
+    assert not list((project / "node").iterdir())

@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from browser_runtime import browser_options
+from nodes.browser import browser_options
 
 
 @pytest.fixture
 def linux_display(monkeypatch):
-    monkeypatch.setattr("browser_runtime.platform.system", lambda: "Linux")
+    monkeypatch.setattr("nodes.browser.platform.system", lambda: "Linux")
     monkeypatch.setenv("DISPLAY", ":99")
     monkeypatch.setattr(
-        "browser_runtime.shutil.which",
+        "nodes.browser.shutil.which",
         lambda name: "/usr/bin/chromium" if name == "chromium" else None,
     )
 
@@ -22,19 +22,19 @@ def test_linux_discovers_chromium_and_keeps_hidden_browser_headed(linux_display)
     assert options.browser_path == "/usr/bin/chromium"
     assert not any(arg.startswith("--headless") for arg in options.arguments)
     assert "--window-position=-32000,-32000" in options.arguments
-    assert Path(options.extensions[0]).name == "turnstilePatch"
+    assert Path(options.extensions[0]).name == "turnstile"
     assert options.is_auto_port
 
 
 def test_linux_without_display_explains_virtual_display(monkeypatch):
-    monkeypatch.setattr("browser_runtime.platform.system", lambda: "Linux")
+    monkeypatch.setattr("nodes.browser.platform.system", lambda: "Linux")
     monkeypatch.delenv("DISPLAY", raising=False)
-    with pytest.raises(RuntimeError, match="DISPLAY.*start.sh.*Xvfb"):
+    with pytest.raises(RuntimeError, match="DISPLAY.*Xvfb.*nodes"):
         browser_options()
 
 
 def test_linux_without_browser_reports_installation_requirement(linux_display, monkeypatch):
-    monkeypatch.setattr("browser_runtime.shutil.which", lambda name: None)
+    monkeypatch.setattr("nodes.browser.shutil.which", lambda name: None)
     with pytest.raises(RuntimeError, match="Chromium.*BROWSER_PATH"):
         browser_options()
 
@@ -61,7 +61,7 @@ def test_extension_directory_requires_manifest(linux_display, tmp_path):
 
 
 def test_non_linux_does_not_require_x_display(monkeypatch):
-    monkeypatch.setattr("browser_runtime.platform.system", lambda: "Windows")
+    monkeypatch.setattr("nodes.browser.platform.system", lambda: "Windows")
     monkeypatch.delenv("DISPLAY", raising=False)
     options = browser_options(hidden=True)
     assert not any(arg.startswith("--headless") for arg in options.arguments)

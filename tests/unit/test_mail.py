@@ -3,7 +3,7 @@ import time
 import pytest
 import requests
 
-from cloud_mail import CloudMail, extract_code
+from nodes.mail import CloudMail, extract_code
 
 
 def message(**changes):

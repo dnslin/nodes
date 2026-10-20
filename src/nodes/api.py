@@ -1,10 +1,80 @@
-"""Claim the account's Premium trial once and read its current HTTP proxy list."""
+"""ProxyScrape account and trial HTTP contracts."""
 
 from urllib.parse import urlsplit
 
 import requests
 
+from .console import log
+
+# ProxyScrape dashboard
 BASE_URL = "https://dashboard.proxyscrape.com"
+PS_REGISTER = f"{BASE_URL}/v2/v4/account/auth/register"
+PS_ME = f"{BASE_URL}/v2/v4/account/auth/me"
+PS_VERIFY_EMAIL = f"{BASE_URL}/v2/v4/account/verify-email"
+PS_RESEND = f"{BASE_URL}/v2/v4/account/reset-verification-code"
+PS_SIGNUP_PAGE = f"{BASE_URL}/v2/sign-up"
+
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+)
+
+
+HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "User-Agent": UA,
+    "Origin": BASE_URL,
+    "Referer": PS_SIGNUP_PAGE,
+}
+
+
+def register(email, password, turnstile_token):
+    s = requests.Session()
+    s.headers.update(HEADERS)
+    r = s.post(
+        PS_REGISTER,
+        data={
+            "email": email,
+            "password": password,
+            "cf_turnstile_token": turnstile_token,
+        },
+        timeout=30,
+    )
+    log(f"注册响应 HTTP {r.status_code}")
+    r.raise_for_status()
+    data = r.json()
+    token = data.get("access_token")
+    if not token:
+        raise RuntimeError("注册未返回 access_token")
+    log("注册成功，已取得访问凭据")
+    return s, token, data.get("userData", {})
+
+
+def resend_code(session, access_token):
+    """触发发送/重发验证码（注册后不会自动发，必须调一次）。"""
+    r = session.post(PS_RESEND, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+    log(f"发送验证邮件 HTTP {r.status_code}")
+    r.raise_for_status()
+    return True
+
+
+def verify_email(session, access_token, code):
+    # 关键：字段名是 verificationCode（不是 code），且服务端要 multipart/form-data
+    r = session.post(
+        PS_VERIFY_EMAIL,
+        headers={"Authorization": f"Bearer {access_token}"},
+        files={"verificationCode": (None, code)},
+        timeout=30,
+    )
+    log(f"验邮箱响应 HTTP {r.status_code}")
+    r.raise_for_status()
+    return True
+
+
+def whoami(session, access_token):
+    r = session.post(PS_ME, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+    r.raise_for_status()
+    return r.json()
 
 
 def fetch_trial_proxies(session, access_token):

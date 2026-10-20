@@ -1,13 +1,17 @@
 #!/bin/sh
 set -eu
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 mkdir -p account node
 container="nodes-export-$(date +%Y%m%d%H%M%S)-$$"
 printf '运行容器：%s\n' "$container"
 
 status=0
-docker compose run --no-deps --name "$container" nodes "$@" || status=$?
+if [ "$#" -gt 0 ]; then
+    docker compose run --no-deps --name "$container" nodes nodes "$@" || status=$?
+else
+    docker compose run --no-deps --name "$container" nodes || status=$?
+fi
 
 # 先复制到临时目录，避免 Docker 与本机共享目录时边读边覆盖同一文件。
 output=$(mktemp -d "${TMPDIR:-/tmp}/nodes-output.XXXXXX")

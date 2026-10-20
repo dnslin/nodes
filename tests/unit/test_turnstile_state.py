@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-import proxyscrape_register as app
+from nodes import browser as app
 
 
 class StateTab:
@@ -52,7 +52,6 @@ def test_state_reports_javascript_error_instead_of_waiting_until_timeout():
 def browser_fixture(monkeypatch):
     import DrissionPage
 
-    import browser_runtime
 
     tab = StateTab()
     tab.get = lambda url: None
@@ -72,7 +71,7 @@ def browser_fixture(monkeypatch):
             return self.current
 
     monkeypatch.setattr(DrissionPage, "Chromium", lambda options: Browser())
-    monkeypatch.setattr(browser_runtime, "browser_options", lambda *args: object())
+    monkeypatch.setattr(app, "browser_options", lambda *args: object())
     monkeypatch.setattr(app.time, "monotonic", Clock().monotonic)
     monkeypatch.setattr(app.time, "sleep", lambda delay: None)
     return tab, closed

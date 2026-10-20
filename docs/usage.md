@@ -4,7 +4,7 @@
 
 ## 配置
 
-配置优先级为：**进程环境变量 > `.env` > `config.local.json`**。相对路径以项目目录为基准。使用 JSON 时，复制 `config.local.json.example` 后编辑。
+配置优先级为：**进程环境变量 > `.env` > `config.local.json`**。配置从当前工作目录读取，相对路径也以该目录为基准。使用 JSON 时，复制 `config.local.json.example` 后编辑。
 
 JSON 配置适用于本机 Python 运行。默认 Docker 配置不会复制或挂载 `config.local.json`，请通过 `.env` 配置容器。
 
@@ -14,11 +14,11 @@ JSON 配置适用于本机 Python 运行。默认 Docker 配置不会复制或�
 | `CLOUD_MAIL_EMAIL` | `cloud_mail_email` | 有权创建附属邮箱的登录邮箱 |
 | `CLOUD_MAIL_PASSWORD` | `cloud_mail_password` | 登录密码 |
 | `BROWSER_PATH` | `browser_path` | 可选，Chrome / Chromium 可执行文件路径 |
-| `TURNSTILE_EXTENSION_PATH` | `turnstile_extension_path` | 可选，扩展目录，默认使用项目的 `turnstilePatch/` |
+| `TURNSTILE_EXTENSION_PATH` | `turnstile_extension_path` | 可选，扩展目录，默认使用安装包内的 `nodes/resources/turnstile/` |
 
 Docker 镜像已配置 `/usr/bin/chromium`，一般不需要指定浏览器路径。不要把宿主机的 macOS 或 Windows 浏览器路径传入 Linux 容器。
 
-`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.1.1` 固定版本。它不是 Python / JSON 配置项。
+`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.2.0` 固定版本。它不是 Python / JSON 配置项。
 
 Cloud Mail 客户端共用本轮登录状态，邮箱 HTTP 请求依次执行，浏览器任务仍可并发。只有明确的 HTTP 401 或 API `code: 401` 才触发一次重新登录。网络错误、权限错误、登录失败或第二次 401 会直接报告。
 
@@ -31,19 +31,19 @@ Cloud Mail 客户端共用本轮登录状态，邮箱 HTTP 请求依次执行，
 docker compose pull
 
 # 检查邮箱，不创建账号
-./docker-run.sh --check-mail
+./scripts/run-docker.sh --check-mail
 
 # 一个任务，只尝试一次
-./docker-run.sh --count 1 --threads 1 --attempts 1 --hide-browser
+./scripts/run-docker.sh --count 1 --threads 1 --attempts 1 --hide-browser
 
 # 继续已保存且邮箱已验证的账号
-./docker-run.sh --resume saved@example.org
+./scripts/run-docker.sh --resume saved@example.org
 
 # 查看全部参数
-./docker-run.sh --help
+./scripts/run-docker.sh --help
 ```
 
-`docker-run.sh` 会转发参数，等待容器结束，然后将账号和节点复制到运行脚本的本机项目目录。输出先复制到临时目录，再写入本机目录，以免 Docker 共享同一目录时边读边覆盖文件。
+`scripts/run-docker.sh` 会转发参数，等待容器结束，然后将账号和节点复制到运行脚本的本机项目目录。输出先复制到临时目录，再写入本机目录，以免 Docker 共享同一目录时边读边覆盖文件。
 
 复制完成后删除本次运行容器，并保留原任务退出码。复制失败时不删除容器，终端会显示容器名、临时目录和手动取回命令。例如，将日志里的实际容器名替换到下方：
 
@@ -56,13 +56,13 @@ docker cp CONTAINER_NAME:/app/account/. ./account/
 
 容器使用 Chromium 和 Xvfb，无需宿主机桌面。GHCR 的版本镜像同时包含 `linux/amd64` 和 `linux/arm64`，Docker 根据机器架构自动选择，不需要手动添加 `--platform`。
 
-发布标签包括完整版本（例如 `0.1.1`）、次版本（`0.1`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
+发布标签包括完整版本（例如 `0.2.0`）、次版本（`0.2`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
 
 本地修改源码后，可构建独立的镜像：
 
 ```bash
 NODES_IMAGE=nodes:local docker compose build
-NODES_IMAGE=nodes:local ./docker-run.sh --check-mail
+NODES_IMAGE=nodes:local ./scripts/run-docker.sh --check-mail
 ```
 
 ## Linux 本机
@@ -70,27 +70,37 @@ NODES_IMAGE=nodes:local ./docker-run.sh --check-mail
 按[首页](../README.md#linux-直接运行)安装依赖、配置邮箱后：
 
 ```bash
-./start.sh --count 1 --threads 1 --attempts 1 --hide-browser
-./start.sh --resume saved@example.org
+.venv/bin/nodes --count 1 --threads 1 --attempts 1 --hide-browser
+.venv/bin/nodes --resume saved@example.org
 ```
 
-Linux 没有 `DISPLAY` 时，`start.sh` 自动调用 `xvfb-run`。有桌面的 Linux 可以使用 `--show-browser`。在 Xvfb 中，该参数只会把窗口显示在虚拟显示器中。
+Linux 没有 `DISPLAY` 时，`nodes` 在注册前自动调用 `xvfb-run`，无需额外启动脚本。检查邮箱和恢复已有账号不启动显示器。有桌面的 Linux 可以使用 `--show-browser`。在 Xvfb 中，该参数只会把窗口显示在虚拟显示器中。
 
 如果 Chromium 由 Snap 安装或位于非标准路径，可配置 `BROWSER_PATH` 指向实际可执行文件。
 
 ## macOS 与 Windows 本机
 
-需要 Python 3.11+ 和 Chrome。先安装依赖并配置 `.env`：
+需要 Python 3.11+ 和 Chrome。macOS 安装并运行：
 
 ```bash
-python -m pip install -r requirements.txt
-python proxyscrape_register.py --check-mail
-python proxyscrape_register.py --count 1 --threads 1 --attempts 1 --show-browser
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/nodes --check-mail
+.venv/bin/nodes --count 1 --threads 1 --attempts 1 --show-browser
 ```
 
-macOS 可使用 `./start.sh`；Windows 可使用 `start.bat`。Windows 启动脚本会优先使用 `.venv\Scripts\python.exe`。Docker 启动脚本需要 POSIX shell，Windows 推荐使用 WSL。
+Windows PowerShell 使用相同的安装入口：
 
-在可交互终端中，不带参数运行 `python proxyscrape_register.py` 会进入菜单。非交互环境必须指定 `--count`、`--resume` 或 `--check-mail`。macOS 和 Windows 完整注册流程尚未实机验收。
+```powershell
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install .
+.venv\Scripts\nodes.exe --check-mail
+.venv\Scripts\nodes.exe --count 1 --threads 1 --attempts 1 --show-browser
+```
+
+两种平台都需要先在工作目录配置 `.env`。不再提供 `start.sh` 或 `start.bat`。Docker 启动脚本需要 POSIX shell，Windows 推荐使用 WSL。
+
+在可交互终端中，不带参数运行 `nodes` 会进入菜单。也可用当前 Python 环境执行 `python -m nodes`。非交互环境必须指定 `--count`、`--resume` 或 `--check-mail`。macOS 和 Windows 完整注册流程尚未实机验收。
 
 ## 命令参数
 
@@ -126,12 +136,12 @@ macOS 可使用 `./start.sh`；Windows 可使用 `start.bat`。Windows 启动脚
 
 ## 可选的代理检查
 
-仓库保留 `filter_xai_proxies.py`。它默认读取最新代理文件，并尝试访问 xAI 登录页面；这只说明该次请求的结果，不能代表所有目标站点均可使用。
+仓库保留 `tools/check_proxies.py`。它默认读取最新代理文件，并尝试访问 xAI 登录页面；这只说明该次请求的结果，不能代表所有目标站点均可使用。
 
 ```bash
-.venv/bin/python filter_xai_proxies.py --help
+.venv/bin/python tools/check_proxies.py --help
 # --url 可改为你有权测试的目标；下面仅检查前 3 个代理。
-.venv/bin/python filter_xai_proxies.py --limit 3 --workers 1 --url https://example.com
+.venv/bin/python tools/check_proxies.py --limit 3 --workers 1 --url https://example.com
 ```
 
 该工具会请求真实目标，并在日志中输出代理地址和认证凭据。分享日志前请删除凭据。
@@ -143,6 +153,6 @@ git pull --ff-only
 docker compose pull
 ```
 
-固定了 `NODES_IMAGE` 版本的用户，需要先修改该值再拉取新版本。本地源码构建用户重新执行 `NODES_IMAGE=nodes:local docker compose build`。本机直接运行时，在更新后重新安装 `requirements.txt`。
+固定了 `NODES_IMAGE` 版本的用户，需要先修改该值再拉取新版本。本地源码构建用户重新执行 `NODES_IMAGE=nodes:local docker compose build`。本机直接运行时，在更新后重新执行 `.venv/bin/python -m pip install .`。
 
 保留 `.env`、`account/` 和 `node/`，不要把它们当作可删除的构建缓存。

@@ -16,7 +16,7 @@ proxyscrape_token.json
 account/
 node/
 
-# turnstilePatch 扩展现随仓库提供（开箱即用）；仍可用 TURNSTILE_EXTENSION_PATH 覆盖为本机其它目录
+# 浏览器扩展随 src/nodes/resources/ 分发。
 
 # Runtime artifacts
 *.log

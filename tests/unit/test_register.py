@@ -1,15 +1,14 @@
 import json
 
-import pytest
-
-import proxyscrape_register as app
+from nodes import api
+from nodes import workflow as app
 
 CONFIG = {
     "cloud_mail_url": "https://mail.example.org",
     "cloud_mail_email": "owner@example.org",
     "cloud_mail_password": "secret",
     "browser_path": "",
-    "turnstile_extension_path": "turnstilePatch",
+    "turnstile_extension_path": "",
 }
 
 
@@ -54,7 +53,7 @@ def setup_flow(monkeypatch):
     monkeypatch.setattr(app, "CloudMail", Mail)
     monkeypatch.setattr(app, "solve_turnstile", lambda **kw: "challenge-token")
     monkeypatch.setattr(
-        app,
+        api,
         "register",
         lambda *a: (
             Session(),
@@ -62,10 +61,10 @@ def setup_flow(monkeypatch):
             {"associatedSubaccounts": []},
         ),
     )
-    monkeypatch.setattr(app, "resend_code", lambda *a: True)
-    monkeypatch.setattr(app, "whoami", lambda *a: {"EmailVerified": True})
+    monkeypatch.setattr(api, "resend_code", lambda *a: True)
+    monkeypatch.setattr(api, "whoami", lambda *a: {"EmailVerified": True})
     monkeypatch.setattr(
-        app,
+        api,
         "fetch_trial_proxies",
         lambda session, token: (
             "trial-42",
@@ -85,7 +84,7 @@ def test_cloud_mail_flow_exports_verified_account_and_proxy(monkeypatch, tmp_pat
         assert code == "aB3dE6gH9j"
         return True
 
-    monkeypatch.setattr(app, "verify_email", verify)
+    monkeypatch.setattr(api, "verify_email", verify)
     path = tmp_path / "proxies.txt"
     rec = app._register_once(True, path, CONFIG, mail, mail_timeout=9)
     assert rec["email"] == "random@example.org"
@@ -126,49 +125,12 @@ def test_mail_failure_is_saved_and_returns_failure(monkeypatch, tmp_path):
 
 def test_does_not_export_when_server_still_reports_unverified(monkeypatch, tmp_path):
     mail = setup_flow(monkeypatch)
-    monkeypatch.setattr(app, "verify_email", lambda *a: True)
-    monkeypatch.setattr(app, "whoami", lambda *a: {"EmailVerified": False})
+    monkeypatch.setattr(api, "verify_email", lambda *a: True)
+    monkeypatch.setattr(api, "whoami", lambda *a: {"EmailVerified": False})
     rec = app._register_once(True, tmp_path / "proxies.txt", CONFIG, mail, mail_timeout=9)
     assert rec["verified"] is False
     assert "验证" in rec["error"]
     assert not (tmp_path / "proxies.txt").exists()
-
-
-def test_batch_cli_does_not_prompt_and_propagates_failure(monkeypatch):
-    monkeypatch.setattr(app, "load_config", lambda path: CONFIG)
-    seen = []
-
-    def run(count, threads, hidden, config, **kwargs):
-        seen.append((count, threads, hidden, config, kwargs))
-        return False
-
-    monkeypatch.setattr(app, "run_round", run)
-    assert app.main(["--count", "2", "--threads", "1", "--hide-browser", "--attempts", "1"]) == 1
-    assert seen[0][:3] == (2, 1, True)
-    assert seen[0][4]["max_attempts"] == 1
-
-
-@pytest.mark.parametrize(
-    "args",
-    [
-        ["--count", "0"],
-        ["--count", "-1"],
-        ["--count", "1", "--threads", "0"],
-        ["--count", "1", "--attempts", "0"],
-        ["--count", "1", "--mail-timeout", "0"],
-    ],
-)
-def test_invalid_options_fail_before_side_effects(args):
-    with pytest.raises(SystemExit) as error:
-        app.main(args)
-    assert error.value.code == 2
-
-
-def test_help_works_without_credentials(capsys):
-    with pytest.raises(SystemExit) as error:
-        app.main(["--help"])
-    assert error.value.code == 0
-    assert "--count" in capsys.readouterr().out
 
 
 def test_round_shares_mail_client_and_closes_it_after_all_workers(monkeypatch, tmp_path):
@@ -187,9 +149,7 @@ def test_round_shares_mail_client_and_closes_it_after_all_workers(monkeypatch, t
 
     monkeypatch.setattr(app, "CloudMail", Login)
     monkeypatch.setattr(app, "register_one", worker)
-    monkeypatch.setattr(app, "_ACCOUNT_DIR", str(tmp_path / "account"))
-    monkeypatch.setattr(app, "_NODE_DIR", str(tmp_path / "node"))
-    assert app.run_round(3, 2, True, CONFIG) is True
+    assert app.run_round(3, 2, True, CONFIG, root=tmp_path) is True
     assert calls == ["login"]
     assert len(clients) == 3
     assert all(client is clients[0] for client in clients)

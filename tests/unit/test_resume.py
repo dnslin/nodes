@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-import proxyscrape_register as app
+from nodes import api, cli
+from nodes import workflow as app
 
 EMAIL = "saved@example.org"
 
@@ -23,17 +24,17 @@ def saved_account(tmp_path, monkeypatch):
         "error": "missing AccountID",
     }
     path.write_text(json.dumps(previous) + "\n" + json.dumps(target) + "\n")
-    monkeypatch.setattr(app, "_ACCOUNT_DIR", str(account_dir))
-    monkeypatch.setattr(app, "_NODE_DIR", str(node_dir))
+    monkeypatch.chdir(tmp_path)
 
     def unexpected(*args, **kwargs):
         pytest.fail("Resume must not create a mailbox, register, or launch a browser")
 
     monkeypatch.setattr(app, "CloudMail", unexpected)
-    monkeypatch.setattr(app, "register", unexpected)
+    monkeypatch.setattr(api, "register", unexpected)
     monkeypatch.setattr(app, "solve_turnstile", unexpected)
-    monkeypatch.setattr(app, "load_config", unexpected)
-    monkeypatch.setattr(app, "whoami", lambda session, token: {"EmailVerified": True})
+    monkeypatch.setattr(cli, "load_config", unexpected)
+    monkeypatch.setattr(cli, "relaunch_with_display", unexpected)
+    monkeypatch.setattr(api, "whoami", lambda session, token: {"EmailVerified": True})
     calls = []
 
     def proxies(session, token):
@@ -41,13 +42,13 @@ def saved_account(tmp_path, monkeypatch):
         calls.append(token)
         return "trial-42", "proxy-user", "p@ss:word", ["127.0.0.1:8080"]
 
-    monkeypatch.setattr(app, "fetch_trial_proxies", proxies, raising=False)
+    monkeypatch.setattr(api, "fetch_trial_proxies", proxies, raising=False)
     return path, node_dir, previous, target, calls
 
 
 def test_resume_exports_for_the_same_saved_account_without_registration(saved_account):
     path, node_dir, previous, target, calls = saved_account
-    assert app.main(["--resume", EMAIL]) == 0
+    assert cli.main(["--resume", EMAIL]) == 0
     records = [json.loads(line) for line in path.read_text().splitlines()]
     assert records[:2] == [previous, target]
     resumed = records[-1]
@@ -69,8 +70,8 @@ def test_resume_reports_server_failure_and_keeps_credentials(saved_account, monk
     def rejected(*args):
         raise RuntimeError("POST claim-trial HTTP 403: trial unavailable")
 
-    monkeypatch.setattr(app, "fetch_trial_proxies", rejected, raising=False)
-    assert app.main(["--resume", EMAIL]) == 1
+    monkeypatch.setattr(api, "fetch_trial_proxies", rejected, raising=False)
+    assert cli.main(["--resume", EMAIL]) == 1
     resumed = json.loads(path.read_text().splitlines()[-1])
     assert resumed["access_token"] == target["access_token"]
     assert "trial unavailable" in resumed["error"]
@@ -80,15 +81,15 @@ def test_resume_reports_server_failure_and_keeps_credentials(saved_account, monk
 def test_resume_missing_account_does_not_touch_remote_services(saved_account):
     path, _, _, _, calls = saved_account
     before = path.read_text()
-    assert app.main(["--resume", "unknown@example.org"]) == 1
+    assert cli.main(["--resume", "unknown@example.org"]) == 1
     assert path.read_text() == before
     assert calls == []
 
 
 def test_resume_unverified_account_does_not_claim_a_trial(saved_account, monkeypatch):
     path, _, _, _, calls = saved_account
-    monkeypatch.setattr(app, "whoami", lambda session, token: {"EmailVerified": False})
-    assert app.main(["--resume", EMAIL]) == 1
+    monkeypatch.setattr(api, "whoami", lambda session, token: {"EmailVerified": False})
+    assert cli.main(["--resume", EMAIL]) == 1
     assert calls == []
     resumed = json.loads(path.read_text().splitlines()[-1])
     assert resumed["verified"] is False
@@ -97,5 +98,5 @@ def test_resume_unverified_account_does_not_claim_a_trial(saved_account, monkeyp
 
 def test_resume_and_count_are_mutually_exclusive():
     with pytest.raises(SystemExit) as error:
-        app.main(["--resume", EMAIL, "--count", "1"])
+        cli.main(["--resume", EMAIL, "--count", "1"])
     assert error.value.code == 2

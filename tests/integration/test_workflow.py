@@ -7,8 +7,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-import proxy_service
-import proxyscrape_register as app
+from nodes import api, cli, workflow
 
 
 @pytest.fixture
@@ -187,19 +186,19 @@ def test_one_round_creates_mailbox_verifies_and_persists_exports(
         "browser_path": "",
         "turnstile_extension_path": "",
     }
-    monkeypatch.setattr(app, "load_config", lambda _: config)
-    monkeypatch.setattr(app, "solve_turnstile", lambda **kwargs: "local-token")
-    monkeypatch.setattr(app, "_ACCOUNT_DIR", str(tmp_path / "account"))
-    monkeypatch.setattr(app, "_NODE_DIR", str(tmp_path / "node"))
-    monkeypatch.setattr(proxy_service, "BASE_URL", base)
+    monkeypatch.setattr(cli, "load_config", lambda _: config)
+    monkeypatch.setattr(workflow, "solve_turnstile", lambda **kwargs: "local-token")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "relaunch_with_display", lambda argv: None)
+    monkeypatch.setattr(api, "BASE_URL", base)
     for name, path in [
         ("PS_REGISTER", "/register"),
         ("PS_RESEND", "/resend"),
         ("PS_VERIFY_EMAIL", "/verify"),
         ("PS_ME", "/me"),
     ]:
-        monkeypatch.setattr(app, name, base + path)
-    assert app.main(["--count", "1", "--threads", "1", "--attempts", "1"]) == 0
+        monkeypatch.setattr(api, name, base + path)
+    assert cli.main(["--count", "1", "--threads", "1", "--attempts", "1"]) == 0
     records = list((tmp_path / "account").glob("*.jsonl"))
     assert len(records) == 1
     record = json.loads(records[0].read_text())
@@ -221,7 +220,7 @@ def test_one_round_creates_mailbox_verifies_and_persists_exports(
 
     assert record["proxy_account_id"] == "trial-42"
     assert state["trial_claims"] == 1
-    assert app.main(["--resume", record["email"]]) == 0
+    assert cli.main(["--resume", record["email"]]) == 0
     assert state["trial_claims"] == 1
     assert sum(path == "/register" for _, path, _ in state["requests"]) == 1
     assert sum(path == "/verify" for _, path, _ in state["requests"]) == 1

@@ -21,7 +21,7 @@ except Exception as exc:
     ) from exc
 
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NODE_DIR = os.path.join(BASE_DIR, "node")
 TEST_URL = "https://accounts.x.ai/sign-up?redirect=grok-com"
 

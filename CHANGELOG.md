@@ -1,5 +1,24 @@
 # 更新记录
 
+## 0.2.0 — 2026-10-20
+
+### 调整
+
+- 应用迁入标准的 `src/nodes/` 包，分离命令行、业务流程、HTTP 接口、浏览器、邮箱和文件存储。
+- 本地入口统一为安装后的 `nodes` 命令，也支持 `python -m nodes`。
+- 删除 `start.sh`、`start.bat` 和项目自定义的容器入口脚本。仅保留 `scripts/run-docker.sh`，Docker 用户无需在本机安装 Python。
+- 依赖和构建配置统一到 `pyproject.toml`，移除重复的 requirements 文件。浏览器扩展随安装包分发。
+- 单元、集成和运行检查分别放入 `tests/unit/`、`tests/integration/`、`tests/smoke/`，辅助工具移入 `tools/`。
+- Docker 镜像安装应用包，不包含仓库测试和文档源码。CI 同步验证安装后的标准命令。
+- Docker 默认停止信号使用 `SIGINT`，与命令行中断一致，避免虚拟显示器的父进程先退出而截断应用清理。
+
+### 使用方式变更
+
+- `./docker-run.sh ...` 改为 `./scripts/run-docker.sh ...`。
+- 本地运行先安装项目，再执行 `.venv/bin/nodes ...`；Windows 使用 `.venv\Scripts\nodes.exe ...`。
+- 本地配置和 `account/`、`node/` 均以当前工作目录为准。已有文件无需转换；在原项目目录运行即可继续读取。
+- 直接使用 `docker run` 时，命令中需要写出程序名，例如 `docker run --rm ghcr.io/dnslin/nodes:0.2.0 nodes --help`。通过 Docker 启动脚本运行时仍只传业务参数。
+
 ## 0.1.1 — 2026-10-20
 
 ### 新增

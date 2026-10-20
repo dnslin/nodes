@@ -9,11 +9,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-RUN chmod +x start.sh docker-entrypoint.sh \
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-cache-dir . \
     && mkdir -p account node
 
-ENTRYPOINT ["/usr/bin/tini", "-s", "-g", "--", "/app/docker-entrypoint.sh"]
-CMD ["--count", "1", "--threads", "1", "--hide-browser"]
+STOPSIGNAL SIGINT
+
+ENTRYPOINT ["/usr/bin/tini", "-s", "-g", "--", "xvfb-run", "-a", "-s", "-screen 0 1280x900x24"]
+CMD ["nodes", "--count", "1", "--threads", "1", "--hide-browser"]

@@ -22,6 +22,17 @@
 
 代理数量、试用资格、有效期和目标站点可用性由服务端决定。成功导出表示已取得代理配置，不代表每个代理都已通过连通性检查。
 
+## 项目结构
+
+```text
+src/nodes/       应用代码：命令行、流程、接口、浏览器、邮箱、存储
+scripts/        唯一启动脚本 run-docker.sh，负责 Docker 运行和文件取回
+tests/          unit 单元测试、integration 本地集成测试、smoke 运行检查
+tools/          可选的鉴权和代理检查工具
+docs/           使用与开发文档
+pyproject.toml  依赖、安装入口和构建配置
+```
+
 ## 快速开始
 
 推荐使用 Docker。需要 Docker Engine / Docker Desktop、Docker Compose，以及可执行 shell 脚本的终端。Windows 用户可在 WSL 中使用此方式。
@@ -50,17 +61,17 @@ CLOUD_MAIL_PASSWORD="你的登录密码"
 
 ```bash
 docker compose pull
-./docker-run.sh --check-mail
+./scripts/run-docker.sh --check-mail
 ```
 
 看到 `Cloud Mail 接口正常` 后再继续。此检查只读取主邮箱邮件列表，不创建邮箱，也不注册 ProxyScrape 账号。
 
-默认使用 `ghcr.io/dnslin/nodes:latest`，Docker 会选择当前机器对应的 amd64 或 arm64 镜像。固定版本时，在 `.env` 中设置 `NODES_IMAGE=ghcr.io/dnslin/nodes:0.1.1`。
+默认使用 `ghcr.io/dnslin/nodes:latest`，Docker 会选择当前机器对应的 amd64 或 arm64 镜像。固定版本时，在 `.env` 中设置 `NODES_IMAGE=ghcr.io/dnslin/nodes:0.2.0`。
 
 ### 4. 运行一个任务
 
 ```bash
-./docker-run.sh --count 1 --threads 1 --attempts 1 --hide-browser
+./scripts/run-docker.sh --count 1 --threads 1 --attempts 1 --hide-browser
 ```
 
 此命令只尝试一次。成功后会显示导出的代理数量，以及本机 `account/`、`node/` 的完整路径。
@@ -69,7 +80,7 @@ docker compose pull
 
 ## 取出节点
 
-**使用 `docker-run.sh` 后，直接在运行命令的本机项目目录中找文件：**
+**使用 `scripts/run-docker.sh` 后，直接在运行命令的本机项目目录中找文件：**
 
 ```text
 nodes/
@@ -95,7 +106,7 @@ http://username:password@192.0.2.10:8080
 如果注册成功、邮箱已验证，但领取试用或导出失败，用账号文件里的邮箱继续：
 
 ```bash
-./docker-run.sh --resume saved@example.org
+./scripts/run-docker.sh --resume saved@example.org
 ```
 
 程序查询当前账号的真实状态：尚未领取试用时提交领取请求一次，已经领取时读取试用子账号并导出。它不会创建新邮箱或注册新账号，也不会打开浏览器。访问凭据仍需有效，邮箱也必须已经通过服务端验证。
@@ -107,8 +118,8 @@ http://username:password@192.0.2.10:8080
 | 镜像标签 | 用途 |
 | --- | --- |
 | `ghcr.io/dnslin/nodes:latest` | 最新稳定版本 |
-| `ghcr.io/dnslin/nodes:0.1.1` | 固定到指定发布版本 |
-| `ghcr.io/dnslin/nodes:0.1` | 跟随 0.1 系列更新 |
+| `ghcr.io/dnslin/nodes:0.2.0` | 固定到指定发布版本 |
+| `ghcr.io/dnslin/nodes:0.2` | 跟随 0.2 系列更新 |
 
 GitHub Actions 在 `main` 推送、PR 和版本标签上运行离线测试，并分别在 amd64、arm64 原生运行器构建镜像、检查容器能否启动。只有版本标签触发 GHCR 发布；两个架构都通过后，才更新多架构版本标签和 `latest`。CI 不创建真实邮箱、不注册账号，也不领取试用。
 
@@ -123,7 +134,7 @@ docker compose pull
 
 ```bash
 NODES_IMAGE=nodes:local docker compose build
-NODES_IMAGE=nodes:local ./docker-run.sh --check-mail
+NODES_IMAGE=nodes:local ./scripts/run-docker.sh --check-mail
 ```
 
 ## Linux 直接运行
@@ -134,18 +145,20 @@ NODES_IMAGE=nodes:local ./docker-run.sh --check-mail
 sudo apt-get update
 sudo apt-get install -y python3 python3-venv chromium xvfb xauth
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-./start.sh --check-mail
-./start.sh --count 1 --threads 1 --attempts 1 --hide-browser
+.venv/bin/python -m pip install .
+.venv/bin/nodes --check-mail
+.venv/bin/nodes --count 1 --threads 1 --attempts 1 --hide-browser
 ```
 
-同样需要先配置 `.env`。没有桌面时，`start.sh` 自动通过 Xvfb 提供虚拟显示器。浏览器路径、macOS 和 Windows 本地运行方法见[使用文档](docs/usage.md)。
+同样需要先配置 `.env`。`nodes` 是安装后生成的标准命令，也可以通过 `python -m nodes` 运行。Linux 没有桌面时，注册入口自动使用 Xvfb；检查邮箱和恢复账号不需要显示器。
+
+在存放 `.env` 的工作目录中执行命令，账号和节点也写入该目录。浏览器路径、macOS 和 Windows 本地运行方法见[使用文档](docs/usage.md)。
 
 ## 常见问题
 
 **Docker 运行成功，本机没有节点文件？**
 
-请通过 `./docker-run.sh ...` 运行。它使用 Docker 文件复制接口取回输出，不依赖项目目录是否共享给 Docker 虚拟机。看到“节点已保存到”后，打开对应的本机路径。
+请通过 `./scripts/run-docker.sh ...` 运行。它使用 Docker 文件复制接口取回输出，不依赖项目目录是否共享给 Docker 虚拟机。看到“节点已保存到”后，打开对应的本机路径。
 
 **Cloud Mail 返回 401？**
 

@@ -4,9 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nodes-cloudmail"
-version = "0.1.1"
+version = "0.2.0"
 description = "Nodes with Cloud Mail 3.0.0, Linux and Docker support"
 requires-python = ">=3.11"
+readme = "README.md"
 dependencies = [
   "requests>=2.28",
   "DrissionPage>=4.1",
@@ -18,12 +19,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6", "build>=1.2"]
 
+[project.scripts]
+nodes = "nodes.cli:main"
+
 [tool.hatch.build.targets.wheel]
-only-include = ["proxyscrape_register.py", "proxyscrape_auth.py", "filter_xai_proxies.py", "cloud_mail.py", "nodes_config.py", "browser_runtime.py", "proxy_service.py", "turnstilePatch"]
+packages = ["src/nodes"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py311"

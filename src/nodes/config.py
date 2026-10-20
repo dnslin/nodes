@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+DEFAULT_EXTENSION = Path(__file__).parent / "resources" / "turnstile"
+
 FIELDS = {
     "cloud_mail_url": "CLOUD_MAIL_URL",
     "cloud_mail_email": "CLOUD_MAIL_EMAIL",
@@ -39,5 +41,5 @@ def load_config(base_dir, *, environ=None):
         if value and (field == "turnstile_extension_path" or "/" in value or "\\" in value):
             result[field] = str((base_dir / Path(value).expanduser()).resolve())
     if not result["turnstile_extension_path"]:
-        result["turnstile_extension_path"] = str(base_dir / "turnstilePatch")
+        result["turnstile_extension_path"] = str(DEFAULT_EXTENSION)
     return result

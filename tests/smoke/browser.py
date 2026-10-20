@@ -1,15 +1,11 @@
 """Offline browser smoke: localhost page, headed Chromium, bundled extension."""
 
-import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from threading import Thread
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from DrissionPage import Chromium
 
-from browser_runtime import browser_options
+from nodes.browser import browser_options
 
 
 class SmokePage(BaseHTTPRequestHandler):

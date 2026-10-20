@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 import pytest
 import requests
 
-from proxy_service import fetch_trial_proxies
+from nodes.api import fetch_trial_proxies
 
 PREFIX = "/v2/v4/account"
 ELIGIBILITY = f"{PREFIX}/premium/trial-eligibility"

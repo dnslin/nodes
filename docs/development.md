@@ -8,7 +8,7 @@
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pip install -e '.[dev]'
 ```
 
 ## 本地检查
@@ -16,11 +16,10 @@ python3 -m venv .venv
 ```bash
 .venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check .
-.venv/bin/python -m compileall -q proxyscrape_register.py proxyscrape_auth.py cloud_mail.py nodes_config.py browser_runtime.py proxy_service.py filter_xai_proxies.py
-sh -n start.sh
-sh -n docker-run.sh
-sh -n docker-entrypoint.sh
+.venv/bin/python -m compileall -q src tests tools
+sh -n scripts/run-docker.sh
 .venv/bin/python -m build
+.venv/bin/nodes --help
 ```
 
 自动化测试使用模拟响应或本地 HTTP 服务，不会创建真实邮箱、注册 ProxyScrape 账号或领取真实试用。覆盖配置优先级、邮箱续登与收信、注册与导出流程、已保存账号恢复、试用领取状态、分页以及启动脚本文件取回。
@@ -29,37 +28,50 @@ sh -n docker-entrypoint.sh
 
 ```bash
 docker compose pull
-docker compose run --rm nodes python tests/smoke_browser.py
-docker compose run --rm nodes python tests/smoke_turnstile_dom.py
-.venv/bin/python tests/smoke_container.py
+docker create --name nodes-browser-smoke --shm-size 1g ghcr.io/dnslin/nodes:0.2.0 python /app/smoke.py
+docker cp tests/smoke/browser.py nodes-browser-smoke:/app/smoke.py
+docker start -a nodes-browser-smoke
+docker rm nodes-browser-smoke
+.venv/bin/python tests/smoke/container.py
 ```
 
-前两个脚本在容器内打开本地测试页面，验证 Chromium、虚拟显示器、扩展加载及封闭 Shadow DOM（页面封装的组件树）中的 iframe 检测。第三个脚本在 Docker 主机运行，检查退出码和终止信号传递。这些检查均不请求 ProxyScrape 注册接口。
+生产镜像只安装应用包，不包含测试目录。上面的命令将单个浏览器检查文件复制到临时容器，在本地测试页面上验证 Chromium、虚拟显示器和扩展。检查封闭 Shadow DOM 中的 iframe 时，改为复制 `tests/smoke/turnstile_dom.py`。`container.py` 在 Docker 主机运行，检查退出码和 `docker stop` 的中断处理。这些检查均不请求 ProxyScrape 注册接口。
 
-`smoke_container.py` 默认检查 `ghcr.io/dnslin/nodes:latest`。使用固定版本或本地构建时，传入实际镜像名，例如 `.venv/bin/python tests/smoke_container.py nodes:local`。
+镜像声明 `STOPSIGNAL SIGINT`，与本地 Ctrl+C 的中断方式一致。容器检查会确认默认停止信号送达应用，应用完成清理后再退出。
+
+`tests/smoke/container.py` 默认检查 `ghcr.io/dnslin/nodes:latest`。使用固定版本或本地构建时，传入实际镜像名，例如 `.venv/bin/python tests/smoke/container.py nodes:local`。
 
 检查真实 Docker 输出取回可执行以下命令。它会复制 Docker 端已有的账号和节点文件，但不创建新账号：
 
 ```bash
-./docker-run.sh python -c 'print("offline output copy check")'
+./scripts/run-docker.sh --help
 ```
 
 ## 模块职责
 
 | 文件 | 职责 |
 | --- | --- |
-| `proxyscrape_register.py` | 命令行、注册与验证、账号保存、导出和恢复流程 |
-| `cloud_mail.py` | Cloud Mail 登录、附属邮箱、邮件轮询和验证码识别 |
-| `proxy_service.py` | 查询试用、领取试用、读取代理凭据和分页节点 |
-| `browser_runtime.py` | Chrome / Chromium 启动配置 |
-| `nodes_config.py` | 环境变量、`.env` 和 JSON 配置合并 |
-| `docker-run.sh` | 容器运行及输出复制到本机 |
+| `src/nodes/cli.py` | 命令行解析、交互菜单和本地虚拟显示器启动 |
+| `src/nodes/workflow.py` | 注册、验证、批量导出与已有账号恢复 |
+| `src/nodes/api.py` | ProxyScrape 账号、试用和代理 HTTP 接口 |
+| `src/nodes/mail.py` | Cloud Mail 登录、附属邮箱、邮件轮询和验证码识别 |
+| `src/nodes/browser.py` | Chrome / Chromium 配置和验证组件状态处理 |
+| `src/nodes/config.py` | 工作目录中的环境变量、`.env` 和 JSON 配置合并 |
+| `src/nodes/storage.py` | 账号快照、代理文件和输出路径 |
+| `src/nodes/console.py` | 线程标记和控制台日志 |
+| `scripts/run-docker.sh` | 容器运行及输出复制到本机 |
 
-`proxyscrape_auth.py` 和 `filter_xai_proxies.py` 是保留的辅助工具，不参与默认注册流程。
+`tools/proxyscrape_auth.py` 和 `tools/check_proxies.py` 是保留的辅助工具，不参与默认注册流程。
+
+扩展资源随 `src/nodes/resources/turnstile/` 打包。安装后通过 `nodes` 或 `python -m nodes` 使用应用，不再依赖根目录中的 Python 文件或修改 `sys.path`。依赖只在 `pyproject.toml` 中维护。
+
+单元测试放在 `tests/unit/`，本地 HTTP 集成测试放在 `tests/integration/`，需显式运行的环境检查放在 `tests/smoke/`。
 
 ## 验证范围
 
-当前版本完成了 Linux arm64 Docker 浏览器检查、真实 Cloud Mail 登录续期检查，以及已有账号的邮箱验证状态查询、试用开通和 100 个 HTTP 代理导出。容器输出已通过真实文件复制取回 macOS 本机。
+0.2.0 结构调整完成了离线测试、独立安装包检查、Linux arm64 Docker 浏览器检查及本机输出取回检查。本次未重新执行真实邮箱、注册或试用操作。
+
+此前版本已完成真实 Cloud Mail 登录续期检查，以及已有账号的邮箱验证状态查询、试用开通和 100 个 HTTP 代理导出。这些历史结果不替代 0.2.0 的真实业务验收。
 
 这些结果不等于所有平台和网络都已验收。Windows / macOS 完整注册流程、amd64 上的真实注册业务流程，以及导出代理的逐条连通性仍需在目标环境检查。CI 的双架构检查仅验证镜像构建、容器启动和浏览器依赖能否导入。试用资格、验证服务和代理数量由外部服务决定。
 
@@ -76,8 +88,8 @@ GHCR 登录使用仓库自带的 `GITHUB_TOKEN`，不需要创建额外的发布
 发布新版本时先修改 `pyproject.toml` 和 `CHANGELOG.md`，提交并推送到 `main`，再创建对应版本标签，例如：
 
 ```bash
-git tag -a v0.1.2 -m 'Release v0.1.2'
-git push origin v0.1.2
+git tag -a v0.2.1 -m 'Release v0.2.1'
+git push origin v0.2.1
 ```
 
 查看 [Actions](https://github.com/dnslin/nodes/actions/workflows/ci.yml) 结果，确认 GHCR 已发布两个架构后，再发布对应的 GitHub Release。

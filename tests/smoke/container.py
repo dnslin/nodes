@@ -47,8 +47,9 @@ def main():
             "-u",
             "-c",
             "import signal,sys,time; "
-            "signal.signal(signal.SIGTERM, lambda *_: "
-            '(print("SIGTERM received", flush=True), sys.exit(0))); '
+            "signal.signal(signal.SIGINT, lambda *_: "
+            '(print("SIGINT received", flush=True), time.sleep(0.2), '
+            'print("cleanup complete", flush=True), sys.exit(0))); '
             'print("ready", flush=True); time.sleep(120)',
         )
         deadline = time.monotonic() + 15
@@ -56,10 +57,12 @@ def main():
             if time.monotonic() >= deadline:
                 raise AssertionError("Python did not start in the container")
             time.sleep(0.1)
-        docker("kill", "--signal", "TERM", name)
-        docker("wait", name, timeout=15)
-        assert "SIGTERM received" in docker("logs", name), "SIGTERM was not forwarded to Python"
-        print("PASS: Docker preserves exit status and delivers SIGTERM to Python.")
+        docker("stop", "--time", "5", name, timeout=15)
+        assert docker("wait", name, timeout=15) == "130", "Default stop did not exit with SIGINT"
+        logs = docker("logs", name)
+        assert "SIGINT received" in logs, "Default Docker stop did not deliver SIGINT to Python"
+        assert "cleanup complete" in logs, "Docker stopped before Python finished cleanup"
+        print("PASS: exit status preserved; Docker stop delivers SIGINT and completes cleanup.")
     finally:
         docker("rm", "-f", name)
 

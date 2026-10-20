@@ -1,16 +1,11 @@
 """Offline regression: detect a challenge iframe inside a closed shadow root."""
 
-import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from threading import Thread
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from DrissionPage import Chromium
 
-import proxyscrape_register as app
-from browser_runtime import browser_options
+from nodes.browser import _read_state, browser_options
 
 PAGE = b"""<!doctype html><title>Closed shadow challenge fixture</title>
 <input type="hidden" name="cf-turnstile-response" value="">
@@ -61,7 +56,7 @@ def main():
         print(
             "PASS: tab.ele(css:iframe..., timeout=0) detects the closed-shadow iframe.", flush=True
         )
-        state = app._read_state(tab)
+        state = _read_state(tab)
         assert state["ready"] is True, state
         assert state["hasApi"] is True, state
         assert state["hasInput"] is True, state
