@@ -135,3 +135,65 @@ def test_check_mail_uses_working_directory_config_without_a_display(monkeypatch,
     assert events == ["owner@example.org", "closed"]
     assert not (tmp_path / "account").exists()
     assert not (tmp_path / "node").exists()
+
+
+def test_sync_resin_needs_no_mail_browser_or_registration(monkeypatch):
+    config = {"resin_url": "https://resin.example.org", "resin_admin_token": "admin"}
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("Sync must not access mailbox, browser or registration")
+
+    monkeypatch.setattr(cli, "CloudMail", unexpected)
+    monkeypatch.setattr(cli, "relaunch_with_display", unexpected)
+    monkeypatch.setattr(workflow, "run_round", unexpected)
+    monkeypatch.setattr(workflow, "resume_account", unexpected)
+    calls = []
+    monkeypatch.setattr(cli.resin, "sync", lambda config: calls.append(config))
+    assert cli.main(["--sync-resin"]) == 0
+    assert calls == [config]
+
+
+@pytest.mark.parametrize("result", [True, False])
+def test_batch_syncs_once_after_all_exports_including_partial_success(monkeypatch, result):
+    config = {**CONFIG, "resin_url": "https://resin.example.org", "resin_admin_token": "admin"}
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(cli, "relaunch_with_display", lambda argv: None)
+    events = []
+
+    def run(*args, **kwargs):
+        events.append("exports complete")
+        return result
+
+    def sync(config, **kwargs):
+        assert kwargs == {"skip_empty": True}
+        events.append("sync")
+
+    monkeypatch.setattr(workflow, "run_round", run)
+    monkeypatch.setattr(cli.resin, "sync", sync)
+    assert cli.main(["--count", "3"]) == (0 if result else 1)
+    assert events == ["exports complete", "sync"]
+
+
+@pytest.mark.parametrize("config,args", [
+    ({}, ["--sync-resin"]),
+    ({**CONFIG, "resin_url": "https://resin.example.org"}, ["--count", "1"]),
+    ({**CONFIG, "resin_admin_token": "admin"}, ["--count", "1"]),
+])
+def test_missing_resin_config_fails_before_external_operations(monkeypatch, config, args, capsys):
+    monkeypatch.setattr(cli, "load_config", lambda path: config)
+    monkeypatch.setattr(
+        workflow, "run_round", lambda *args, **kwargs: pytest.fail("Must not register")
+    )
+    monkeypatch.setattr(
+        cli.resin, "sync", lambda *args, **kwargs: pytest.fail("Must not sync")
+    )
+    assert cli.main(args) == 1
+    assert "缺少 Resin 配置" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("other", [["--count", "1"], ["--resume", "a@b.org"], ["--check-mail"]])
+def test_sync_resin_is_mutually_exclusive_with_other_commands(other):
+    with pytest.raises(SystemExit) as error:
+        cli.main(["--sync-resin", *other])
+    assert error.value.code == 2

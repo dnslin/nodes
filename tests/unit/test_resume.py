@@ -32,7 +32,7 @@ def saved_account(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "CloudMail", unexpected)
     monkeypatch.setattr(api, "register", unexpected)
     monkeypatch.setattr(app, "solve_turnstile", unexpected)
-    monkeypatch.setattr(cli, "load_config", unexpected)
+    monkeypatch.setattr(cli, "load_config", lambda path: {})
     monkeypatch.setattr(cli, "relaunch_with_display", unexpected)
     monkeypatch.setattr(api, "whoami", lambda session, token: {"EmailVerified": True})
     calls = []
@@ -94,6 +94,27 @@ def test_resume_unverified_account_does_not_claim_a_trial(saved_account, monkeyp
     resumed = json.loads(path.read_text().splitlines()[-1])
     assert resumed["verified"] is False
     assert resumed["userData"]["EmailVerified"] is False
+
+
+def test_resume_sync_failure_keeps_successful_export_and_account(saved_account, monkeypatch):
+    path, node_dir, _, _, calls = saved_account
+    monkeypatch.setattr(
+        cli, "load_config",
+        lambda path: {"resin_url": "https://resin.example.org", "resin_admin_token": "admin"},
+    )
+
+    def failed(config, **kwargs):
+        assert calls == ["saved-token"]
+        assert len(list(node_dir.glob("*.txt"))) == 1
+        raise RuntimeError("Resin HTTP 401; retry --sync-resin")
+
+    monkeypatch.setattr(cli.resin, "sync", failed)
+    assert cli.main(["--resume", EMAIL]) == 1
+    record = json.loads(path.read_text().splitlines()[-1])
+    assert record["verified"] is True
+    assert record["proxy_count"] == 1
+    assert "error" not in record
+    assert len(list(node_dir.glob("*.txt"))) == 1
 
 
 def test_resume_and_count_are_mutually_exclusive():

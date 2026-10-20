@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import workflow
+from . import resin, workflow
 from .config import load_config
 from .console import log
 from .mail import CloudMail
@@ -84,11 +84,23 @@ def main(argv=None):
     command.add_argument(
         "--check-mail", action="store_true", help="仅检查 Cloud Mail 登录及主邮箱收信接口"
     )
+    command.add_argument(
+        "--sync-resin", action="store_true", help="将已有导出合并同步到 Resin，不注册新账号"
+    )
     args = parser.parse_args(argv)
     try:
-        if args.resume:
-            return 0 if workflow.resume_account(args.resume) else 1
         config = load_config(Path.cwd())
+        resin_enabled = False
+        if not args.check_mail:
+            resin_enabled = resin.configured(config, required=args.sync_resin)
+        if args.sync_resin:
+            resin.sync(config)
+            return 0
+        if args.resume:
+            success = workflow.resume_account(args.resume)
+            if success and resin_enabled:
+                resin.sync(config, skip_empty=True)
+            return 0 if success else 1
         missing = [
             key.upper()
             for key in (
@@ -113,7 +125,7 @@ def main(argv=None):
                 mail.session.close()
             return 0
         if not args.count and not sys.stdin.isatty():
-            parser.error("非交互环境必须指定 --count、--resume 或 --check-mail")
+            parser.error("非交互环境必须指定 --count、--resume、--check-mail 或 --sync-resin")
         relaunch_with_display(argv)
         kwargs = {
             "max_attempts": args.attempts,
@@ -128,12 +140,16 @@ def main(argv=None):
                 config,
                 **kwargs,
             )
+            if resin_enabled:
+                resin.sync(config, skip_empty=True)
             return 0 if success else 1
         while True:
             count, threads, headless = guide()
             if count <= 0:
                 return 0
             workflow.run_round(count, threads, headless, config, **kwargs)
+            if resin_enabled:
+                resin.sync(config, skip_empty=True)
     except KeyboardInterrupt:
         log("操作已中断")
         return 130

@@ -15,10 +15,13 @@ JSON 配置适用于本机 Python 运行。默认 Docker 配置不会复制或�
 | `CLOUD_MAIL_PASSWORD` | `cloud_mail_password` | 登录密码 |
 | `BROWSER_PATH` | `browser_path` | 可选，Chrome / Chromium 可执行文件路径 |
 | `TURNSTILE_EXTENSION_PATH` | `turnstile_extension_path` | 可选，扩展目录，默认使用安装包内的 `nodes/resources/turnstile/` |
+| `RESIN_URL` | `resin_url` | 可选，Resin 站点地址，不包含 `/api/v1` |
+| `RESIN_ADMIN_TOKEN` | `resin_admin_token` | 可选，Resin 管理令牌，与站点地址同时填写后启用自动同步 |
+| `RESIN_SUBSCRIPTION_NAME` | `resin_subscription_name` | 专用本地订阅名，默认为 `nodes` |
 
 Docker 镜像已配置 `/usr/bin/chromium`，一般不需要指定浏览器路径。不要把宿主机的 macOS 或 Windows 浏览器路径传入 Linux 容器。
 
-`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.2.1` 固定版本。它不是 Python / JSON 配置项。
+`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.3.0` 固定版本。它不是 Python / JSON 配置项。
 
 Cloud Mail 客户端共用本轮登录状态，邮箱 HTTP 请求依次执行，浏览器任务仍可并发。只有明确的 HTTP 401 或 API `code: 401` 才触发一次重新登录。网络错误、权限错误、登录失败或第二次 401 会直接报告。
 
@@ -56,7 +59,7 @@ docker cp CONTAINER_NAME:/app/account/. ./account/
 
 容器使用 Chromium 和 Xvfb，无需宿主机桌面。GHCR 的版本镜像同时包含 `linux/amd64` 和 `linux/arm64`，Docker 根据机器架构自动选择，不需要手动添加 `--platform`。
 
-发布标签包括完整版本（例如 `0.2.1`）、次版本（`0.2`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
+发布标签包括完整版本（例如 `0.3.0`）、次版本（`0.3`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
 
 本地修改源码后，可构建独立的镜像：
 
@@ -107,7 +110,7 @@ py -m venv .venv
 
 两种平台都需要先在工作目录配置 `.env`。Docker 启动脚本需要 POSIX shell，Windows 推荐使用 WSL。
 
-在可交互终端中，不带参数运行 `nodes` 会进入菜单。也可用当前 Python 环境执行 `python -m nodes`。非交互环境必须指定 `--count`、`--resume` 或 `--check-mail`。macOS 和 Windows 完整注册流程尚未实机验收。
+在可交互终端中，不带参数运行 `nodes` 会进入菜单。也可用当前 Python 环境执行 `python -m nodes`。非交互环境必须指定 `--count`、`--resume`、`--check-mail` 或 `--sync-resin`。macOS 和 Windows 完整注册流程尚未实机验收。
 
 ## 命令参数
 
@@ -116,6 +119,7 @@ py -m venv .venv
 | `--count N` | 本轮任务数，失败任务可能按 `--attempts` 使用新邮箱重试 | 交互菜单输入 |
 | `--resume EMAIL` | 继续该邮箱已保存账号的试用处理和代理导出，只执行一次 | 关闭 |
 | `--check-mail` | 登录 Cloud Mail 并读取主邮箱邮件列表 | 关闭 |
+| `--sync-resin` | 只将已有导出合并同步到 Resin，不创建邮箱、注册或领取试用 | 关闭 |
 | `--threads N` | 并发数，实际不超过任务数和 8 | 3 |
 | `--attempts N` | 每个任务最多尝试次数 | 3 |
 | `--hide-browser` | 隐藏浏览器窗口 | 开启 |
@@ -123,9 +127,9 @@ py -m venv .venv
 | `--mail-timeout N` | 等待新验证邮件的秒数 | 180 |
 | `--challenge-timeout N` | 浏览器验证超时秒数 | 120 |
 
-`--count`、`--resume`、`--check-mail` 互斥。`--resume` 不使用邮箱配置、浏览器或 `--attempts`；它要求已保存的 ProxyScrape 访问凭据仍然有效。
+`--count`、`--resume`、`--check-mail`、`--sync-resin` 互斥。`--resume` 不使用邮箱配置、浏览器或 `--attempts`；它要求已保存的 ProxyScrape 访问凭据仍然有效。`--sync-resin` 只需要 Resin 配置和已有节点文件。
 
-一轮命令行任务结束后退出。全部任务导出成功返回 0；存在未完成任务返回 1；参数错误返回 2；程序捕获到键盘中断时返回 130。
+一轮命令行任务结束后退出。全部任务导出且已启用的 Resin 同步成功返回 0；存在未完成任务或同步失败返回 1；参数错误返回 2；程序捕获到键盘中断时返回 130。
 
 ## 文件与恢复
 
@@ -140,6 +144,36 @@ py -m venv .venv
 只有服务端确认 `EmailVerified: true` 后才会处理试用。尚未领取时提交一次领取请求；已经领取时从套餐概览中识别试用子账号，不选择付费子账号替代。服务端拒绝、套餐过期或代理列表暂不可用时，命令会报错。可以根据错误修复后，再对同一账号执行 `--resume`。
 
 如果领取请求发出后没有收到响应，不会立即重复提交。再次 `--resume` 时会先重新查询领取状态。
+
+## Resin 自动导入
+
+支持 Resin 1.2.0 的本地订阅接口。在 `.env` 中配置：
+
+```dotenv
+RESIN_URL=https://resin.example.org
+RESIN_ADMIN_TOKEN="你的管理令牌"
+RESIN_SUBSCRIPTION_NAME=nodes
+```
+
+使用管理令牌，不是代理请求用的 `RESIN_PROXY_TOKEN`。地址和令牌均留空时不连接 Resin；只填写其中一项会报配置错误。`--check-mail` 不执行同步。
+
+配置后，批量任务结束会统一同步一次，`--resume` 导出成功后也会同步。程序读取当前工作目录下所有 `node/proxies_*.txt`（包含恢复导出），与 Resin 同名专用订阅中的已有节点合并，按完整代理地址去重。首次创建 `local` 订阅，后续只更新其内容并触发刷新，不修改其他订阅或平台配置。多账号仍共用这一个订阅。
+
+已有同名订阅必须是逐行 HTTP 代理文本的本地订阅；远程订阅、其他格式或多个同名订阅会报错，请更换专用订阅名。导入成功表示 Resin 已解析节点，可用性仍由 Resin 后续探测。
+
+同步失败不会重新注册，也不会删除账号或节点文件。修复配置或网络后，单独补同步：
+
+```bash
+./scripts/run-docker.sh --sync-resin
+# 本地 Python 安装也可运行：
+.venv/bin/nodes --sync-resin
+```
+
+Docker 同步读取 Docker 主机映射的 `node/`；使用远程 Docker 或 Colima 时，参见上面的目录映射说明。Resin 内容已保存但响应丢失时，重试会先查询同名订阅并合并，避免重复创建。
+
+合并会保留历史节点，不自动判断套餐到期或删除旧节点。需要清理时，同时移走对应的本地导出文件并从 Resin 订阅内容中移除，避免下次同步重新加入。不要同时运行多个进程向同一订阅同步：Resin 的内容更新接口不提供原子追加，并行更新可能互相覆盖。
+
+接口依据：[Resin 订阅接口](https://github.com/Resinat/Resin/blob/v1.2.0/internal/service/control_plane_subscription.go)。
 
 ## 可选的代理检查
 

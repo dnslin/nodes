@@ -22,13 +22,13 @@ sh -n scripts/run-docker.sh
 .venv/bin/nodes --help
 ```
 
-自动化测试使用模拟响应或本地 HTTP 服务，不会创建真实邮箱、注册 ProxyScrape 账号或领取真实试用。覆盖配置优先级、邮箱续登与收信、注册与导出流程、已保存账号恢复、试用领取状态、分页以及启动脚本文件取回。
+自动化测试使用模拟响应或本地 HTTP 服务，不会创建真实邮箱、注册 ProxyScrape 账号、领取真实试用或写入生产 Resin。覆盖配置优先级、邮箱续登与收信、注册与导出流程、已保存账号恢复、试用领取状态、分页、Resin 订阅合并及启动脚本文件取回。
 
 ## 容器检查
 
 ```bash
 docker compose pull
-docker create --name nodes-browser-smoke --shm-size 1g ghcr.io/dnslin/nodes:0.2.1 python /app/smoke.py
+docker create --name nodes-browser-smoke --shm-size 1g ghcr.io/dnslin/nodes:0.3.0 python /app/smoke.py
 docker cp tests/smoke/browser.py nodes-browser-smoke:/app/smoke.py
 docker start -a nodes-browser-smoke
 docker rm nodes-browser-smoke
@@ -67,6 +67,7 @@ pyproject.toml  依赖、命令入口和构建配置
 | `src/nodes/browser.py` | Chrome / Chromium 配置和验证组件状态处理 |
 | `src/nodes/config.py` | 工作目录中的环境变量、`.env` 和 JSON 配置合并 |
 | `src/nodes/storage.py` | 账号快照、代理文件和输出路径 |
+| `src/nodes/resin.py` | 将所有导出合并到 Resin 专用本地订阅，刷新及错误报告 |
 | `src/nodes/console.py` | 线程标记和控制台日志 |
 | `scripts/run-docker.sh` | 容器运行及输出复制到本机 |
 

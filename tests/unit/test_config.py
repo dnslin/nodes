@@ -48,3 +48,18 @@ def test_relative_browser_and_extension_paths_are_project_relative(tmp_path):
     config = load_config(tmp_path, environ={})
     assert config["browser_path"] == str(tmp_path / "bin/chromium")
     assert config["turnstile_extension_path"] == str(tmp_path / "custom-extension")
+
+
+def test_resin_config_precedence_and_default_subscription(tmp_path):
+    (tmp_path / "config.local.json").write_text(json.dumps({
+        "resin_url": "https://json.example.org/",
+        "resin_admin_token": "json-token",
+        "resin_subscription_name": "json-sub",
+    }))
+    (tmp_path / ".env").write_text(
+        'RESIN_ADMIN_TOKEN="dotenv#token"\nRESIN_SUBSCRIPTION_NAME=\n'
+    )
+    config = load_config(tmp_path, environ={"RESIN_URL": "https://env.example.org/"})
+    assert config["resin_url"] == "https://env.example.org"
+    assert config["resin_admin_token"] == "dotenv#token"
+    assert config["resin_subscription_name"] == "nodes"

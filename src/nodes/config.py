@@ -14,6 +14,9 @@ FIELDS = {
     "cloud_mail_password": "CLOUD_MAIL_PASSWORD",
     "browser_path": "BROWSER_PATH",
     "turnstile_extension_path": "TURNSTILE_EXTENSION_PATH",
+    "resin_url": "RESIN_URL",
+    "resin_admin_token": "RESIN_ADMIN_TOKEN",
+    "resin_subscription_name": "RESIN_SUBSCRIPTION_NAME",
 }
 
 
@@ -33,9 +36,11 @@ def load_config(base_dir, *, environ=None):
         field: str(env.get(variable, config.get(field, "")) or "")
         for field, variable in FIELDS.items()
     }
-    for field in FIELDS.keys() - {"cloud_mail_password"}:
+    for field in FIELDS.keys() - {"cloud_mail_password", "resin_admin_token"}:
         result[field] = result[field].strip()
     result["cloud_mail_url"] = result["cloud_mail_url"].rstrip("/")
+    result["resin_url"] = result["resin_url"].rstrip("/")
+    result["resin_subscription_name"] = result["resin_subscription_name"] or "nodes"
     for field in ("browser_path", "turnstile_extension_path"):
         value = result[field]
         if value and (field == "turnstile_extension_path" or "/" in value or "\\" in value):
