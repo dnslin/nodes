@@ -55,7 +55,6 @@ def resend_code(session, access_token):
     r = session.post(PS_RESEND, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
     log(f"发送验证邮件 HTTP {r.status_code}")
     r.raise_for_status()
-    return True
 
 
 def verify_email(session, access_token, code):
@@ -68,7 +67,6 @@ def verify_email(session, access_token, code):
     )
     log(f"验邮箱响应 HTTP {r.status_code}")
     r.raise_for_status()
-    return True
 
 
 def whoami(session, access_token):

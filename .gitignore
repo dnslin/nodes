@@ -8,15 +8,13 @@ venv/
 config.local.json
 !config.local.json.example
 
-# Local credentials and sessions
+# Local credentials (including files left by older versions)
 proxyscrape_token.json
 *.token.json
 
 # Generated accounts and proxy credentials
 account/
 node/
-
-# 浏览器扩展随 src/nodes/resources/ 分发。
 
 # Runtime artifacts
 *.log
@@ -26,7 +24,6 @@ screenshots/
 # Tool caches / scratch (不该进仓库)
 .playwright-mcp/
 .wrangler/
-_diag_widget.py
 
 # Local environment and build/test output
 .env.*

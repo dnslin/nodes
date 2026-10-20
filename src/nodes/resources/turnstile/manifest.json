@@ -15,8 +15,5 @@
             "all_frames": true,
             "world": "MAIN"
         }
-    ],
-    "permissions": [
-        "activeTab"
     ]
 }

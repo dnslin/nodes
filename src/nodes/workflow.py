@@ -87,8 +87,7 @@ def _register_once(
         api.resend_code(session, access_token)
         log("等待 Cloud Mail 新验证邮件…")
         code = mail.wait_for_code(email, after_id=after_id, timeout=mail_timeout)
-        if not api.verify_email(session, access_token, code):
-            raise RuntimeError("ProxyScrape 拒绝邮箱验证码")
+        api.verify_email(session, access_token, code)
         complete_proxy_export(rec, session, node_file)
     except Exception as exc:
         rec["error"] = str(exc)
@@ -133,7 +132,7 @@ def run_round(count, threads, headless, config, *, root=None, **kwargs):
         t0 = time.time()
         ok = []
         with ThreadPoolExecutor(max_workers=threads) as ex:
-            futs = {
+            futs = [
                 ex.submit(
                     register_one,
                     i + 1,
@@ -143,9 +142,9 @@ def run_round(count, threads, headless, config, *, root=None, **kwargs):
                     config,
                     mail,
                     **kwargs,
-                ): i + 1
+                )
                 for i in range(count)
-            }
+            ]
             for fu in as_completed(futs):
                 try:
                     r = fu.result()

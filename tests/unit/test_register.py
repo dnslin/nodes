@@ -1,5 +1,8 @@
 import json
 
+import pytest
+import requests
+
 from nodes import api
 from nodes import workflow as app
 
@@ -61,7 +64,7 @@ def setup_flow(monkeypatch):
             {"associatedSubaccounts": []},
         ),
     )
-    monkeypatch.setattr(api, "resend_code", lambda *a: True)
+    monkeypatch.setattr(api, "resend_code", lambda *a: None)
     monkeypatch.setattr(api, "whoami", lambda *a: {"EmailVerified": True})
     monkeypatch.setattr(
         api,
@@ -82,7 +85,6 @@ def test_cloud_mail_flow_exports_verified_account_and_proxy(monkeypatch, tmp_pat
 
     def verify(session, token, code):
         assert code == "aB3dE6gH9j"
-        return True
 
     monkeypatch.setattr(api, "verify_email", verify)
     path = tmp_path / "proxies.txt"
@@ -125,12 +127,38 @@ def test_mail_failure_is_saved_and_returns_failure(monkeypatch, tmp_path):
 
 def test_does_not_export_when_server_still_reports_unverified(monkeypatch, tmp_path):
     mail = setup_flow(monkeypatch)
-    monkeypatch.setattr(api, "verify_email", lambda *a: True)
+    monkeypatch.setattr(api, "verify_email", lambda *a: None)
     monkeypatch.setattr(api, "whoami", lambda *a: {"EmailVerified": False})
     rec = app._register_once(True, tmp_path / "proxies.txt", CONFIG, mail, mail_timeout=9)
     assert rec["verified"] is False
     assert "验证" in rec["error"]
     assert not (tmp_path / "proxies.txt").exists()
+
+
+@pytest.mark.parametrize("endpoint", ["resend_code", "verify_email"])
+def test_verification_http_failure_saves_account_without_export(monkeypatch, tmp_path, endpoint):
+    mail = setup_flow(monkeypatch)
+    session = Session()
+    monkeypatch.setattr(api, "register", lambda *args: (session, "access-token", {}))
+
+    def rejected(*args):
+        raise requests.HTTPError(f"{endpoint}: HTTP 403")
+
+    def unexpected(*args):
+        pytest.fail("Failed verification must not continue to trial or export")
+
+    monkeypatch.setattr(api, endpoint, rejected)
+    monkeypatch.setattr(api, "whoami", unexpected)
+    monkeypatch.setattr(api, "fetch_trial_proxies", unexpected)
+    account = tmp_path / "accounts.jsonl"
+    result = app.register_one(
+        1, True, account, tmp_path / "proxies.txt", CONFIG, mail, max_attempts=1, mail_timeout=9,
+    )
+    assert result["error"] == f"{endpoint}: HTTP 403"
+    assert result["verified"] is False
+    assert json.loads(account.read_text())["access_token"] == "access-token"
+    assert not (tmp_path / "proxies.txt").exists()
+    assert session.closed is True
 
 
 def test_round_shares_mail_client_and_closes_it_after_all_workers(monkeypatch, tmp_path):

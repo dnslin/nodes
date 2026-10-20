@@ -18,7 +18,7 @@ JSON 配置适用于本机 Python 运行。默认 Docker 配置不会复制或�
 
 Docker 镜像已配置 `/usr/bin/chromium`，一般不需要指定浏览器路径。不要把宿主机的 macOS 或 Windows 浏览器路径传入 Linux 容器。
 
-`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.2.0` 固定版本。它不是 Python / JSON 配置项。
+`NODES_IMAGE` 仅供 Docker Compose 选择镜像，默认是 `ghcr.io/dnslin/nodes:latest`。可在 `.env` 中设置为 `ghcr.io/dnslin/nodes:0.2.1` 固定版本。它不是 Python / JSON 配置项。
 
 Cloud Mail 客户端共用本轮登录状态，邮箱 HTTP 请求依次执行，浏览器任务仍可并发。只有明确的 HTTP 401 或 API `code: 401` 才触发一次重新登录。网络错误、权限错误、登录失败或第二次 401 会直接报告。
 
@@ -56,7 +56,7 @@ docker cp CONTAINER_NAME:/app/account/. ./account/
 
 容器使用 Chromium 和 Xvfb，无需宿主机桌面。GHCR 的版本镜像同时包含 `linux/amd64` 和 `linux/arm64`，Docker 根据机器架构自动选择，不需要手动添加 `--platform`。
 
-发布标签包括完整版本（例如 `0.2.0`）、次版本（`0.2`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
+发布标签包括完整版本（例如 `0.2.1`）、次版本（`0.2`）和最新稳定版（`latest`）。`latest` 只随稳定版本发布更新，不跟随 `main` 的每次提交。
 
 本地修改源码后，可构建独立的镜像：
 
@@ -67,12 +67,19 @@ NODES_IMAGE=nodes:local ./scripts/run-docker.sh --check-mail
 
 ## Linux 本机
 
-按[首页](../README.md#linux-直接运行)安装依赖、配置邮箱后：
+需要 Python 3.11+、Chromium 和 Xvfb。Debian / Ubuntu 安装示例：
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y python3 python3-venv chromium xvfb xauth
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/nodes --check-mail
 .venv/bin/nodes --count 1 --threads 1 --attempts 1 --hide-browser
 .venv/bin/nodes --resume saved@example.org
 ```
+
+先按[首页](../README.md#快速开始)配置 `.env`，在该工作目录运行；账号和节点也写入此目录。
 
 Linux 没有 `DISPLAY` 时，`nodes` 在注册前自动调用 `xvfb-run`，无需额外启动脚本。检查邮箱和恢复已有账号不启动显示器。有桌面的 Linux 可以使用 `--show-browser`。在 Xvfb 中，该参数只会把窗口显示在虚拟显示器中。
 
@@ -98,7 +105,7 @@ py -m venv .venv
 .venv\Scripts\nodes.exe --count 1 --threads 1 --attempts 1 --show-browser
 ```
 
-两种平台都需要先在工作目录配置 `.env`。不再提供 `start.sh` 或 `start.bat`。Docker 启动脚本需要 POSIX shell，Windows 推荐使用 WSL。
+两种平台都需要先在工作目录配置 `.env`。Docker 启动脚本需要 POSIX shell，Windows 推荐使用 WSL。
 
 在可交互终端中，不带参数运行 `nodes` 会进入菜单。也可用当前 Python 环境执行 `python -m nodes`。非交互环境必须指定 `--count`、`--resume` 或 `--check-mail`。macOS 和 Windows 完整注册流程尚未实机验收。
 
@@ -139,6 +146,7 @@ py -m venv .venv
 仓库保留 `tools/check_proxies.py`。它默认读取最新代理文件，并尝试访问 xAI 登录页面；这只说明该次请求的结果，不能代表所有目标站点均可使用。
 
 ```bash
+.venv/bin/python -m pip install '.[tools]'
 .venv/bin/python tools/check_proxies.py --help
 # --url 可改为你有权测试的目标；下面仅检查前 3 个代理。
 .venv/bin/python tools/check_proxies.py --limit 3 --workers 1 --url https://example.com
@@ -156,3 +164,13 @@ docker compose pull
 固定了 `NODES_IMAGE` 版本的用户，需要先修改该值再拉取新版本。本地源码构建用户重新执行 `NODES_IMAGE=nodes:local docker compose build`。本机直接运行时，在更新后重新执行 `.venv/bin/python -m pip install .`。
 
 保留 `.env`、`account/` 和 `node/`，不要把它们当作可删除的构建缓存。
+
+## 常见问题
+
+**本机没有节点文件？** 使用 `./scripts/run-docker.sh ...`，按终端显示的本机路径查找。直接使用 Compose 绑定目录时，文件所在主机取决于 Docker 的文件共享配置，参见上面的 [Docker](#docker) 说明。
+
+**Cloud Mail 返回 401？** 程序会重新登录并重试当前请求一次。仍然失败时，检查登录信息和账号接口权限，日志会保留请求方法和接口路径。
+
+**缺少子账号或没有代理？** 注册响应不一定包含试用子账号。程序会查询试用状态；已注册账号使用 `--resume EMAIL`，避免为重试导出重复注册。
+
+**Turnstile 验证超时？** 查看日志中的输入框、iframe 和验证凭据状态，并确认网络能访问目标站点及验证服务。超时不代表注册成功。

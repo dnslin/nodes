@@ -28,7 +28,7 @@ sh -n scripts/run-docker.sh
 
 ```bash
 docker compose pull
-docker create --name nodes-browser-smoke --shm-size 1g ghcr.io/dnslin/nodes:0.2.0 python /app/smoke.py
+docker create --name nodes-browser-smoke --shm-size 1g ghcr.io/dnslin/nodes:0.2.1 python /app/smoke.py
 docker cp tests/smoke/browser.py nodes-browser-smoke:/app/smoke.py
 docker start -a nodes-browser-smoke
 docker rm nodes-browser-smoke
@@ -49,6 +49,15 @@ docker rm nodes-browser-smoke
 
 ## 模块职责
 
+```text
+src/nodes/       应用包及浏览器扩展资源
+scripts/        唯一的 Docker 运行及文件取回脚本
+tests/          unit 单元测试、integration 本地集成、smoke 环境检查
+tools/          可选代理检查工具
+docs/           使用与开发指南
+pyproject.toml  依赖、命令入口和构建配置
+```
+
 | 文件 | 职责 |
 | --- | --- |
 | `src/nodes/cli.py` | 命令行解析、交互菜单和本地虚拟显示器启动 |
@@ -61,19 +70,13 @@ docker rm nodes-browser-smoke
 | `src/nodes/console.py` | 线程标记和控制台日志 |
 | `scripts/run-docker.sh` | 容器运行及输出复制到本机 |
 
-`tools/proxyscrape_auth.py` 和 `tools/check_proxies.py` 是保留的辅助工具，不参与默认注册流程。
+`tools/check_proxies.py` 是独立的代理检查工具，不参与默认流程。使用前安装 `.[tools]` 可选依赖，详见[使用指南](usage.md#可选的代理检查)。
 
 扩展资源随 `src/nodes/resources/turnstile/` 打包。安装后通过 `nodes` 或 `python -m nodes` 使用应用，不再依赖根目录中的 Python 文件或修改 `sys.path`。依赖只在 `pyproject.toml` 中维护。
 
-单元测试放在 `tests/unit/`，本地 HTTP 集成测试放在 `tests/integration/`，需显式运行的环境检查放在 `tests/smoke/`。
-
 ## 验证范围
 
-0.2.0 结构调整完成了离线测试、独立安装包检查、Linux arm64 Docker 浏览器检查及本机输出取回检查。本次未重新执行真实邮箱、注册或试用操作。
-
-此前版本已完成真实 Cloud Mail 登录续期检查，以及已有账号的邮箱验证状态查询、试用开通和 100 个 HTTP 代理导出。这些历史结果不替代 0.2.0 的真实业务验收。
-
-这些结果不等于所有平台和网络都已验收。Windows / macOS 完整注册流程、amd64 上的真实注册业务流程，以及导出代理的逐条连通性仍需在目标环境检查。CI 的双架构检查仅验证镜像构建、容器启动和浏览器依赖能否导入。试用资格、验证服务和代理数量由外部服务决定。
+CI 验证离线流程、安装包和双架构镜像启动；本地浏览器检查验证 Chromium、扩展及虚拟显示器。这些检查不代表真实注册或代理连通性验收。Windows / macOS 完整注册流程和 amd64 真实业务流程仍需在目标环境检查。
 
 ## GitHub Actions 与 GHCR
 
@@ -88,8 +91,8 @@ GHCR 登录使用仓库自带的 `GITHUB_TOKEN`，不需要创建额外的发布
 发布新版本时先修改 `pyproject.toml` 和 `CHANGELOG.md`，提交并推送到 `main`，再创建对应版本标签，例如：
 
 ```bash
-git tag -a v0.2.1 -m 'Release v0.2.1'
-git push origin v0.2.1
+git tag -a vX.Y.Z -m 'Release vX.Y.Z'
+git push origin vX.Y.Z
 ```
 
 查看 [Actions](https://github.com/dnslin/nodes/actions/workflows/ci.yml) 结果，确认 GHCR 已发布两个架构后，再发布对应的 GitHub Release。

@@ -1,5 +1,5 @@
 """
-Filter nodeAuto proxy exports for xAI/Grok reachability.
+Check exported proxies for xAI/Grok reachability.
 
 Default behavior:
   - reads the newest node/proxies_*.txt file

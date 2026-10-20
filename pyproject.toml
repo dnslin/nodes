@@ -4,20 +4,19 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nodes-cloudmail"
-version = "0.2.0"
+version = "0.2.1"
 description = "Nodes with Cloud Mail 3.0.0, Linux and Docker support"
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
   "requests>=2.28",
   "DrissionPage>=4.1",
-  "PyJWT>=2.8",
-  "curl_cffi>=0.6",
   "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6", "build>=1.2"]
+tools = ["curl_cffi>=0.6"]
 
 [project.scripts]
 nodes = "nodes.cli:main"

@@ -2,6 +2,7 @@
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
+from time import sleep
 
 from DrissionPage import Chromium
 
@@ -10,7 +11,16 @@ from nodes.browser import browser_options
 
 class SmokePage(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b"<!doctype html><title>Nodes browser smoke</title><h1 id='result'>Ready</h1>"
+        body = (
+            b"<!doctype html><input type='checkbox'>"
+            if self.path == "/turnstile-frame"
+            else b"""<!doctype html><title>Nodes browser smoke</title><h1 id='result'>Ready</h1>
+<iframe src='/turnstile-frame'></iframe>
+<script>
+window.responseReads = 0;
+window.turnstile = {getResponse() { window.responseReads++; return ''; }};
+</script>"""
+        )
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -37,6 +47,11 @@ def main():
             "Turnstile extension did not run in the page world"
         )
         assert tab.run_js("return navigator.webdriver") is False
+        sleep(1)
+        assert tab.run_js("return window.responseReads") == 0, "Extension polled the page API"
+        assert tab.run_js(
+            "return document.querySelector('iframe').contentDocument.querySelector('input').checked"
+        ) is False, "Extension clicked the fixture without the browser workflow"
         print("PASS: headed Chromium loaded a localhost page and the bundled MV3 extension.")
     finally:
         if browser is not None:
